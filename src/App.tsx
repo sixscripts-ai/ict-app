@@ -10,6 +10,7 @@ import { UploadView } from '@/components/UploadView';
 import { ChatView } from '@/components/ChatView';
 import { EntityDetailDialog } from '@/components/EntityDetailDialog';
 import { processFile } from '@/lib/ai-processor';
+import { generateDemoData } from '@/lib/demo-data';
 import type { Entity, Relationship, Upload as UploadType, FileProcessingLog, DatabaseStats, DomainType, EntityType } from '@/lib/types';
 
 function App() {
@@ -119,6 +120,100 @@ function App() {
     setUploads((currentUploads) => [upload, ...(currentUploads || [])]);
   };
 
+  const handleDemoLoad = () => {
+    const { entities: demoEntities, relationships: demoRelationships } = generateDemoData();
+    
+    setEntities((currentEntities) => [...demoEntities, ...(currentEntities || [])]);
+    setRelationships((currentRelationships) => [...demoRelationships, ...(currentRelationships || [])]);
+
+    const uploadId = `demo-upload-${Date.now()}`;
+    const upload: UploadType = {
+      id: uploadId,
+      type: 'folder',
+      name: 'ICT Demo Dataset',
+      source: 'demo',
+      fileCount: 12,
+      processedCount: 12,
+      status: 'completed',
+      startedAt: new Date().toISOString(),
+      completedAt: new Date().toISOString(),
+      errors: []
+    };
+
+    setUploads((currentUploads) => [upload, ...(currentUploads || [])]);
+
+    const demoLogs: FileProcessingLog[] = [
+      {
+        id: `log-${Date.now()}-1`,
+        uploadId,
+        filePath: 'knowledge_base/ICT_MASTER_LIBRARY.md',
+        fileType: 'md',
+        status: 'completed',
+        message: '✅ Parsed ICT_MASTER_LIBRARY.md → 1 entities extracted',
+        entitiesCreated: 1,
+        timestamp: new Date().toISOString()
+      },
+      {
+        id: `log-${Date.now()}-2`,
+        uploadId,
+        filePath: 'knowledge_base/concepts/fair_value_gap.md',
+        fileType: 'md',
+        status: 'completed',
+        message: '✅ Parsed fair_value_gap.md → 1 entities extracted',
+        entitiesCreated: 1,
+        timestamp: new Date().toISOString()
+      },
+      {
+        id: `log-${Date.now()}-3`,
+        uploadId,
+        filePath: 'knowledge_base/models/silver_bullet.md',
+        fileType: 'md',
+        status: 'completed',
+        message: '✅ Parsed silver_bullet.md → 1 entities extracted',
+        entitiesCreated: 1,
+        timestamp: new Date().toISOString()
+      },
+      {
+        id: `log-${Date.now()}-4`,
+        uploadId,
+        filePath: 'data/training/positive/2026-01-20_LON_EURUSD_OBFVG_001.json',
+        fileType: 'json',
+        status: 'completed',
+        message: '✅ Parsed 2026-01-20_LON_EURUSD_OBFVG_001.json → 1 entities extracted',
+        entitiesCreated: 1,
+        timestamp: new Date().toISOString()
+      },
+      {
+        id: `log-${Date.now()}-5`,
+        uploadId,
+        filePath: 'data/training/negative/2026-01-18_NY_GBPUSD_FAIL_001.json',
+        fileType: 'json',
+        status: 'completed',
+        message: '✅ Parsed 2026-01-18_NY_GBPUSD_FAIL_001.json → 1 entities extracted',
+        entitiesCreated: 1,
+        timestamp: new Date().toISOString()
+      },
+      {
+        id: `log-${Date.now()}-6`,
+        uploadId,
+        filePath: 'src/ict_agent/detectors/fvg.py',
+        fileType: 'py',
+        status: 'completed',
+        message: '✅ Parsed fvg.py → 1 entities extracted',
+        entitiesCreated: 1,
+        timestamp: new Date().toISOString()
+      }
+    ];
+
+    setLogs((currentLogs) => [...demoLogs, ...(currentLogs || [])]);
+
+    toast.success('Demo ICT data loaded successfully!', {
+      description: `Loaded ${demoEntities.length} entities and ${demoRelationships.length} relationships`
+    });
+
+    setActiveTab('dashboard');
+  };
+
   const handleEntitySelect = (entity: Entity) => {
     setSelectedEntity(entity);
     setDetailDialogOpen(true);
@@ -216,6 +311,7 @@ Provide a clear, concise answer. If you find relevant entities, mention them by 
               logs={safeLogs}
               onFileUpload={handleFileUpload}
               onRepoUpload={handleRepoUpload}
+              onDemoLoad={handleDemoLoad}
             />
           </TabsContent>
 

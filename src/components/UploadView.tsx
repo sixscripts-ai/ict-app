@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
-import { CloudArrowUp, Upload as UploadIcon, File } from '@phosphor-icons/react';
+import { CloudArrowUp, Upload as UploadIcon, File, Database } from '@phosphor-icons/react';
 import type { FileProcessingLog, Upload } from '@/lib/types';
 
 interface UploadViewProps {
@@ -13,9 +13,10 @@ interface UploadViewProps {
   logs: FileProcessingLog[];
   onFileUpload: (files: FileList) => void;
   onRepoUpload: (url: string) => void;
+  onDemoLoad?: () => void;
 }
 
-export function UploadView({ uploads, logs, onFileUpload, onRepoUpload }: UploadViewProps) {
+export function UploadView({ uploads, logs, onFileUpload, onRepoUpload, onDemoLoad }: UploadViewProps) {
   const [repoUrl, setRepoUrl] = useState('');
   const [isDragging, setIsDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,9 +49,17 @@ export function UploadView({ uploads, logs, onFileUpload, onRepoUpload }: Upload
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-semibold tracking-tight">Upload & Ingest</h1>
-        <p className="text-muted-foreground mt-1">Upload files or connect a GitHub repository</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">Upload & Ingest</h1>
+          <p className="text-muted-foreground mt-1">Upload files or connect a GitHub repository</p>
+        </div>
+        {onDemoLoad && (
+          <Button onClick={onDemoLoad} variant="outline" className="gap-2">
+            <Database size={16} />
+            Load Demo ICT Data
+          </Button>
+        )}
       </div>
 
       <Card 
