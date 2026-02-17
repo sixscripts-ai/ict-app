@@ -76,6 +76,39 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
     return connected;
   };
 
+  const getPathNodes = (startNodeId: string, maxDepth: number = 3): Set<string> => {
+    const visited = new Set<string>();
+    const queue: Array<{id: string; depth: number}> = [{id: startNodeId, depth: 0}];
+    
+    while (queue.length > 0) {
+      const current = queue.shift()!;
+      if (current.depth > maxDepth || visited.has(current.id)) continue;
+      
+      visited.add(current.id);
+      
+      filteredRelationships.forEach(rel => {
+        if (rel.sourceId === current.id && !visited.has(rel.targetId)) {
+          queue.push({id: rel.targetId, depth: current.depth + 1});
+        }
+        if (rel.targetId === current.id && !visited.has(rel.sourceId)) {
+          queue.push({id: rel.sourceId, depth: current.depth + 1});
+        }
+      });
+    }
+    
+    return visited;
+  };
+
+  const getPathEdges = (nodeIds: Set<string>): Set<string> => {
+    const pathEdges = new Set<string>();
+    filteredRelationships.forEach(rel => {
+      if (nodeIds.has(rel.sourceId) && nodeIds.has(rel.targetId)) {
+        pathEdges.add(`${rel.sourceId}-${rel.targetId}`);
+      }
+    });
+    return pathEdges;
+  };
+
   useEffect(() => {
     if (!svgRef.current || filteredEntities.length === 0) return;
 
@@ -104,7 +137,8 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         .distance(150))
       .force('charge', d3.forceManyBody().strength(-400))
       .force('center', d3.forceCenter(width / 2, height / 2))
-      .force('collision', d3.forceCollide().radius(40));
+      .force('collision', d3.forceCollide().radius(40))
+      .alphaDecay(0.02);
 
     const g = svg.append('g');
 
@@ -124,7 +158,20 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       .attr('stroke', '#35354a')
       .attr('stroke-opacity', 0.6)
       .attr('stroke-width', 2)
-      .attr('class', 'graph-link');
+      .attr('class', 'graph-link')
+      .attr('marker-end', 'url(#arrowhead)');
+
+    g.append('defs').append('marker')
+      .attr('id', 'arrowhead')
+      .attr('viewBox', '0 -5 10 10')
+      .attr('refX', 35)
+      .attr('refY', 0)
+      .attr('markerWidth', 6)
+      .attr('markerHeight', 6)
+      .attr('orient', 'auto')
+      .append('path')
+      .attr('d', 'M0,-5L10,0L0,5')
+      .attr('fill', '#35354a');
 
     const linkLabels = g.append('g')
       .selectAll('text')
@@ -134,6 +181,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       .attr('fill', '#65657a')
       .attr('text-anchor', 'middle')
       .attr('dy', -5)
+      .attr('pointer-events', 'none')
       .text(d => {
         const typeMap: Record<RelationshipType, string> = {
           'CONCEPT_USED_IN_MODEL': 'used in',
@@ -184,6 +232,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       .attr('font-size', 12)
       .attr('font-weight', 500)
       .attr('fill', '#e0e0e0')
+      .attr('pointer-events', 'none')
       .text(d => {
         const maxLength = 20;
         return d.name.length > maxLength ? d.name.substring(0, maxLength) + '...' : d.name;
@@ -191,108 +240,96 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
 
     const updateFocusMode = (focusNodeId: string | null) => {
       if (focusNodeId) {
-        const connected = getConnectedNodeIds(focusNodeId);
+        const pathNodes = getPathNodes(focusNodeId);
+        const pathEdges = getPathEdges(pathNodes);
         
         node.each(function(d) {
-          const isConnected = connected.has(d.id);
+          const isInPath = pathNodes.has(d.id);
+          const isFocused = d.id === focusNodeId;
           d3.select(this)
             .select('circle')
-            .transition()
-            .duration(300)
-            .attr('opacity', isConnected ? 0.9 : 0.2)
-            .attr('r', d.id === focusNodeId ? 35 : 30);
+            .attr('opacity', isInPath ? 0.9 : 0.2)
+            .attr('r', isFocused ? 35 : 30);
           
           d3.select(this)
             .select('text')
-            .transition()
-            .duration(300)
-            .attr('opacity', isConnected ? 1 : 0.3);
+            .attr('opacity', isInPath ? 1 : 0.3);
         });
         
         link.each(function(l) {
           const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
           const targetId = typeof l.target === 'string' ? l.target : l.target.id;
-          const isConnected = (sourceId === focusNodeId || targetId === focusNodeId);
+          const edgeKey = `${sourceId}-${targetId}`;
+          const isInPath = pathEdges.has(edgeKey);
           
           d3.select(this)
-            .transition()
-            .duration(300)
-            .attr('stroke-opacity', isConnected ? 0.8 : 0.1)
-            .attr('stroke-width', isConnected ? 3 : 2);
+            .attr('stroke-opacity', isInPath ? 0.8 : 0.1)
+            .attr('stroke-width', isInPath ? 3 : 2)
+            .attr('stroke', isInPath ? '#00ff88' : '#35354a');
         });
         
         linkLabels.each(function(l) {
           const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
           const targetId = typeof l.target === 'string' ? l.target : l.target.id;
-          const isConnected = (sourceId === focusNodeId || targetId === focusNodeId);
+          const edgeKey = `${sourceId}-${targetId}`;
+          const isInPath = pathEdges.has(edgeKey);
           
           d3.select(this)
-            .transition()
-            .duration(300)
-            .attr('opacity', isConnected ? 1 : 0);
+            .attr('opacity', isInPath ? 1 : 0);
         });
       } else {
         node.selectAll('circle')
-          .transition()
-          .duration(300)
           .attr('opacity', 0.9)
           .attr('r', 30);
         
         node.selectAll('text')
-          .transition()
-          .duration(300)
           .attr('opacity', 1);
         
         link
-          .transition()
-          .duration(300)
           .attr('stroke-opacity', 0.6)
-          .attr('stroke-width', 2);
+          .attr('stroke-width', 2)
+          .attr('stroke', '#35354a');
         
         linkLabels
-          .transition()
-          .duration(300)
           .attr('opacity', 1);
       }
     };
 
     node.on('click', (event, d) => {
+      event.stopPropagation();
       if (event.shiftKey) {
         if (focusedNode?.id === d.id) {
           setFocusedNode(null);
-          updateFocusMode(null);
         } else {
           setFocusedNode(d);
-          updateFocusMode(d.id);
         }
       } else {
         onEntitySelect(d.entity);
       }
     })
     .on('mouseenter', (event, d) => {
-      setHoveredNode(d);
       if (!focusedNode) {
+        setHoveredNode(d);
         d3.select(event.currentTarget)
           .select('circle')
-          .transition()
-          .duration(200)
-          .attr('r', 40)
+          .attr('r', 35)
           .attr('stroke-width', 5);
       }
     })
-    .on('mouseleave', (event, d) => {
-      setHoveredNode(null);
+    .on('mouseleave', (event) => {
       if (!focusedNode) {
+        setHoveredNode(null);
         d3.select(event.currentTarget)
           .select('circle')
-          .transition()
-          .duration(200)
           .attr('r', 30)
           .attr('stroke-width', 3);
       }
     });
 
+    let tickCount = 0;
     simulation.on('tick', () => {
+      tickCount++;
+      
       link
         .attr('x1', d => (d.source as GraphNode).x ?? 0)
         .attr('y1', d => (d.source as GraphNode).y ?? 0)
@@ -304,6 +341,10 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         .attr('y', d => ((d.source as GraphNode).y! + (d.target as GraphNode).y!) / 2);
 
       node.attr('transform', d => `translate(${d.x},${d.y})`);
+      
+      if (tickCount > 300) {
+        simulation.stop();
+      }
     });
 
     if (focusedNode) {
@@ -463,7 +504,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
 
         {focusedNode && (
           <div 
-            className="absolute top-4 left-4 bg-accent/95 border border-accent rounded-lg p-4 max-w-xs backdrop-blur-sm shadow-xl"
+            className="absolute top-4 left-4 bg-accent/95 border border-accent rounded-lg p-4 max-w-sm backdrop-blur-sm shadow-xl"
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
@@ -488,15 +529,42 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
             </div>
             <h4 className="font-semibold text-sm mb-1 text-accent-foreground">{focusedNode.name}</h4>
             <p className="text-xs text-accent-foreground/80 mb-3">
-              Showing connections to this entity
+              Showing full connection path (up to 3 degrees)
             </p>
-            <div className="pt-3 border-t border-accent-foreground/20">
+            <div className="pt-3 border-t border-accent-foreground/20 space-y-2">
               <p className="text-xs text-accent-foreground/70">
                 {(() => {
-                  const connected = getConnectedNodeIds(focusedNode.id);
-                  return `${connected.size - 1} connected entities`;
+                  const pathNodes = getPathNodes(focusedNode.id);
+                  const pathEdges = getPathEdges(pathNodes);
+                  return `${pathNodes.size} entities in path • ${pathEdges.size} connections`;
                 })()}
               </p>
+              {(() => {
+                const pathNodes = getPathNodes(focusedNode.id);
+                const nodesByType = filteredEntities
+                  .filter(e => pathNodes.has(e.id) && e.id !== focusedNode.id)
+                  .reduce((acc, e) => {
+                    if (!acc[e.type]) acc[e.type] = [];
+                    acc[e.type].push(e.name);
+                    return acc;
+                  }, {} as Record<EntityType, string[]>);
+                
+                return Object.entries(nodesByType).length > 0 ? (
+                  <div className="space-y-1">
+                    {Object.entries(nodesByType).map(([type, names]) => (
+                      <div key={type} className="flex items-start gap-2">
+                        <div 
+                          className="w-2 h-2 rounded-full mt-1 flex-shrink-0"
+                          style={{ backgroundColor: entityColors[type as EntityType] }}
+                        />
+                        <span className="text-xs text-accent-foreground/70">
+                          {names.length} {entityLabels[type as EntityType]}{names.length > 1 ? 's' : ''}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
             </div>
           </div>
         )}
