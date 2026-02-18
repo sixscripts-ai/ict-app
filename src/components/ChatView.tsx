@@ -6,8 +6,14 @@ import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PaperPlaneRight, User, Brain, Trash, BookOpen, Target, ChartLine, Flask, Lightbulb } from '@phosphor-icons/react';
+import { PaperPlaneRight, User, Brain, Trash, BookOpen, Target, ChartLine, Flask, Lightbulb, DownloadSimple, FileText, FileMd } from '@phosphor-icons/react';
 import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import type { ChatMessage, Entity } from '@/lib/types';
 
 interface ChatViewProps {
@@ -80,6 +86,90 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
   const handleClearHistory = () => {
     setMessages([]);
     toast.success('Chat history cleared');
+  };
+
+  const exportToMarkdown = () => {
+    if (safeMessages.length === 0) {
+      toast.error('No messages to export');
+      return;
+    }
+
+    let markdown = '# ICT Knowledge Engine Chat Export\n\n';
+    markdown += `*Exported: ${new Date().toLocaleString()}*\n\n`;
+    markdown += `**Total Messages:** ${safeMessages.length}\n\n`;
+    markdown += '---\n\n';
+
+    safeMessages.forEach((message, index) => {
+      const role = message.role === 'user' ? '👤 User' : '🤖 Assistant';
+      const timestamp = new Date(message.timestamp).toLocaleString();
+      
+      markdown += `## ${role} - ${timestamp}\n\n`;
+      markdown += `${message.content}\n\n`;
+      
+      if (message.sources && message.sources.length > 0) {
+        markdown += '**Sources:**\n';
+        message.sources.forEach(source => {
+          markdown += `- ${source.name} (${source.type} - ${source.domain})\n`;
+        });
+        markdown += '\n';
+      }
+      
+      if (index < safeMessages.length - 1) {
+        markdown += '---\n\n';
+      }
+    });
+
+    const blob = new Blob([markdown], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ict-chat-export-${Date.now()}.md`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast.success('Chat exported as Markdown');
+  };
+
+  const exportToJSON = () => {
+    if (safeMessages.length === 0) {
+      toast.error('No messages to export');
+      return;
+    }
+
+    const exportData = {
+      metadata: {
+        exportedAt: new Date().toISOString(),
+        totalMessages: safeMessages.length,
+        exportVersion: '1.0'
+      },
+      messages: safeMessages.map(message => ({
+        id: message.id,
+        role: message.role,
+        content: message.content,
+        timestamp: message.timestamp,
+        sources: message.sources?.map(source => ({
+          id: source.id,
+          name: source.name,
+          type: source.type,
+          domain: source.domain,
+          description: source.description
+        }))
+      }))
+    };
+
+    const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ict-chat-export-${Date.now()}.json`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    
+    toast.success('Chat exported as JSON');
   };
 
   const promptCategories: PromptCategory[] = [
@@ -176,15 +266,35 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
           <p className="text-muted-foreground mt-1">Ask questions about your ICT knowledge base</p>
         </div>
         {safeMessages.length > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleClearHistory}
-            className="gap-2"
-          >
-            <Trash size={16} />
-            Clear History
-          </Button>
+          <div className="flex items-center gap-2">
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" size="sm" className="gap-2">
+                  <DownloadSimple size={16} />
+                  Export
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={exportToMarkdown} className="gap-2 cursor-pointer">
+                  <FileMd size={16} />
+                  Export as Markdown
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={exportToJSON} className="gap-2 cursor-pointer">
+                  <FileText size={16} />
+                  Export as JSON
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleClearHistory}
+              className="gap-2"
+            >
+              <Trash size={16} />
+              Clear History
+            </Button>
+          </div>
         )}
       </div>
 
