@@ -3,7 +3,7 @@ import { useKV } from '@github/spark/hooks';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap } from '@phosphor-icons/react';
+import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, Sparkle } from '@phosphor-icons/react';
 import { DashboardView } from '@/components/DashboardView';
 import { ExplorerView } from '@/components/ExplorerView';
 import { UploadView } from '@/components/UploadView';
@@ -11,6 +11,7 @@ import { ChatView } from '@/components/ChatView';
 import { GraphView } from '@/components/GraphView';
 import { PatternsView } from '@/components/PatternsView';
 import { TrainingView } from '@/components/TrainingView';
+import { SemanticSearchView } from '@/components/SemanticSearchView';
 import { EntityDetailDialog } from '@/components/EntityDetailDialog';
 import { processFile } from '@/lib/ai-processor';
 import { generateDemoData } from '@/lib/demo-data';
@@ -39,7 +40,7 @@ function App() {
 
   useEffect(() => {
     if (safeEntities.length > 0 || safeRelationships.length > 0) {
-      aiGraphRef.current.buildFromEntities(safeEntities, safeRelationships);
+      aiGraphRef.current.buildFromEntities(safeEntities, safeRelationships).catch(console.error);
     }
   }, [safeEntities, safeRelationships]);
 
@@ -257,9 +258,26 @@ function App() {
       console.log('Logic Flow:', logicFlow);
     }
 
-    const conceptEntities = safeEntities.filter(e => e.type === 'concept').slice(0, 15);
-    const modelEntities = safeEntities.filter(e => e.type === 'model').slice(0, 10);
-    const tradeEntities = safeEntities.filter(e => e.type === 'trade').slice(0, 10);
+    const semanticResults = await aiGraph.semanticSearch(question, 20);
+    console.log('Semantic Search Results:', semanticResults.map(r => ({ name: r.node.name, similarity: r.similarity })));
+
+    const conceptEntities = semanticResults
+      .filter(r => r.node.type === 'concept' && r.similarity > 0.5)
+      .slice(0, 15)
+      .map(r => safeEntities.find(e => e.id === r.node.id))
+      .filter((e): e is Entity => e !== undefined);
+    
+    const modelEntities = semanticResults
+      .filter(r => r.node.type === 'model' && r.similarity > 0.5)
+      .slice(0, 10)
+      .map(r => safeEntities.find(e => e.id === r.node.id))
+      .filter((e): e is Entity => e !== undefined);
+    
+    const tradeEntities = semanticResults
+      .filter(r => r.node.type === 'trade' && r.similarity > 0.5)
+      .slice(0, 10)
+      .map(r => safeEntities.find(e => e.id === r.node.id))
+      .filter((e): e is Entity => e !== undefined);
     
     const enrichmentContext = Array.from({ length: Math.min(3, safeEntities.length) }, (_, i) => {
       const entity = safeEntities[i];
@@ -274,34 +292,34 @@ function App() {
       return null;
     }).filter(Boolean);
 
-    const prompt = window.spark.llmPrompt`You are an ICT (Inner Circle Trader) methodology expert. Answer technical questions with precision and depth.
+    const prompt = window.spark.llmPrompt`You are an ICT (Inner Circle Trader) methodology expert. Answer technical questions with precision and depth using semantic search results.
 
 Question: ${question}
 
-Knowledge Base Context:
+Semantically Relevant Knowledge (sorted by similarity):
 
-Concepts Available (${conceptEntities.length}):
+Most Relevant Concepts (similarity > 0.5):
 ${JSON.stringify(conceptEntities.map(e => ({
   name: e.name,
   description: e.description,
   domain: e.domain
 })), null, 2)}
 
-Models Available (${modelEntities.length}):
+Most Relevant Models:
 ${JSON.stringify(modelEntities.map(e => ({
   name: e.name,
   description: e.description,
   domain: e.domain
 })), null, 2)}
 
-Recent Trades (${tradeEntities.length}):
+Most Relevant Trades:
 ${JSON.stringify(tradeEntities.map(e => ({
   name: e.name,
   description: e.description,
   metadata: e.metadata
 })), null, 2)}
 
-All Relationships:
+Relevant Relationships:
 ${JSON.stringify(safeRelationships.slice(0, 30).map(r => ({
   type: r.type,
   from: safeEntities.find(e => e.id === r.sourceId)?.name,
@@ -311,7 +329,7 @@ ${JSON.stringify(safeRelationships.slice(0, 30).map(r => ({
 ${session ? `
 Session Context:
 - Conversation Topic: ${session.context.conversationTopic || 'general'}
-- Intent: ${session.context.inferredIntent || 'unknown'}
+- Intent: ${session.reasoning.lastInference || 'unknown'}
 - Referenced Concepts: ${Array.from(session.context.referencedConcepts.keys()).join(', ')}
 - Confidence: ${(session.reasoning.confidenceScore * 100).toFixed(0)}%
 ` : ''}
@@ -322,6 +340,7 @@ ${JSON.stringify(enrichmentContext, null, 2)}
 ` : ''}
 
 Instructions:
+- Prioritize information from entities with high semantic similarity to the question
 - For concept definitions: Provide precise ICT terminology with bearish/bullish context
 - For trade filters: Query the actual trade data and provide specific results with metrics
 - For model questions: Detail entry criteria, time windows, confluence requirements
@@ -331,10 +350,15 @@ Instructions:
 
     const answer = await window.spark.llm(prompt, 'gpt-4o');
 
-    const relevantSources = safeEntities.filter(e => 
-      answer.toLowerCase().includes(e.name.toLowerCase()) ||
-      (e.description && answer.toLowerCase().includes(e.description.toLowerCase().slice(0, 20)))
-    ).slice(0, 5);
+    const relevantSources = semanticResults
+      .slice(0, 10)
+      .map(r => safeEntities.find(e => e.id === r.node.id))
+      .filter((e): e is Entity => e !== undefined)
+      .filter(e => 
+        answer.toLowerCase().includes(e.name.toLowerCase()) ||
+        (e.description && answer.toLowerCase().includes(e.description.toLowerCase().slice(0, 20)))
+      )
+      .slice(0, 5);
 
     return { answer, sources: relevantSources };
   };
@@ -381,6 +405,10 @@ Instructions:
               <Tree size={16} />
               Explorer
             </TabsTrigger>
+            <TabsTrigger value="search" className="gap-2">
+              <Sparkle size={16} />
+              Search
+            </TabsTrigger>
             <TabsTrigger value="graph" className="gap-2">
               <Graph size={16} />
               Graph
@@ -410,6 +438,14 @@ Instructions:
           <TabsContent value="explorer">
             <ExplorerView 
               entities={safeEntities} 
+              onEntitySelect={handleEntitySelect}
+            />
+          </TabsContent>
+
+          <TabsContent value="search">
+            <SemanticSearchView
+              entities={safeEntities}
+              aiGraph={aiGraphRef.current}
               onEntitySelect={handleEntitySelect}
             />
           </TabsContent>

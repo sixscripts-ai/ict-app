@@ -100,6 +100,8 @@ export class AIGraphInternal {
   private sessionCache: Map<string, ChatSessionCache>;
   private enrichmentCache: Map<string, MarkdownEnrichment>;
   private logicFlows: Map<string, LogicFlow>;
+  private embeddingCache: Map<string, number[]>;
+  private embeddingDimension: number = 768;
 
   constructor() {
     this.nodes = new Map();
@@ -107,26 +109,30 @@ export class AIGraphInternal {
     this.sessionCache = new Map();
     this.enrichmentCache = new Map();
     this.logicFlows = new Map();
+    this.embeddingCache = new Map();
   }
 
-  buildFromEntities(entities: Entity[], relationships: Relationship[]): void {
+  async buildFromEntities(entities: Entity[], relationships: Relationship[]): Promise<void> {
     this.nodes.clear();
     this.edges.clear();
 
-    entities.forEach(entity => {
+    for (const entity of entities) {
+      const embedding = await this.generateEmbedding(entity);
+      
       const node: AIGraphNode = {
         id: entity.id,
         type: entity.type,
         name: entity.name,
         description: entity.description,
         content: entity.content,
+        embedding,
         metadata: entity.metadata,
         tags: entity.tags,
         weight: this.calculateNodeWeight(entity),
         connections: []
       };
       this.nodes.set(entity.id, node);
-    });
+    }
 
     relationships.forEach(rel => {
       const edge: AIGraphEdge = {
@@ -589,6 +595,254 @@ export class AIGraphInternal {
     if (messages.length > 10) confidence += 0.1;
     
     return Math.min(confidence, 1.0);
+  }
+
+  async generateEmbedding(entity: Entity): Promise<number[]> {
+    const cacheKey = `${entity.id}-${entity.updatedAt}`;
+    
+    if (this.embeddingCache.has(cacheKey)) {
+      return this.embeddingCache.get(cacheKey)!;
+    }
+
+    const textToEmbed = this.prepareTextForEmbedding(entity);
+    
+    try {
+      const prompt = window.spark.llmPrompt`Generate a semantic embedding for this text. Focus on capturing the core meaning and technical concepts:
+
+${textToEmbed}
+
+Return ONLY a JSON array of ${this.embeddingDimension} floating point numbers representing the embedding vector. No other text.`;
+
+      const embeddingResponse = await window.spark.llm(prompt, 'gpt-4o-mini', true);
+      const embeddingData = JSON.parse(embeddingResponse);
+      
+      let embedding: number[];
+      if (embeddingData.embedding && Array.isArray(embeddingData.embedding)) {
+        embedding = embeddingData.embedding;
+      } else if (Array.isArray(embeddingData)) {
+        embedding = embeddingData;
+      } else {
+        embedding = this.generateSimpleEmbedding(textToEmbed);
+      }
+
+      if (embedding.length !== this.embeddingDimension) {
+        embedding = this.normalizeEmbedding(embedding, this.embeddingDimension);
+      }
+      
+      this.embeddingCache.set(cacheKey, embedding);
+      return embedding;
+    } catch (error) {
+      console.warn(`Failed to generate embedding for ${entity.id}, using fallback:`, error);
+      const fallbackEmbedding = this.generateSimpleEmbedding(textToEmbed);
+      this.embeddingCache.set(cacheKey, fallbackEmbedding);
+      return fallbackEmbedding;
+    }
+  }
+
+  async semanticSearch(query: string, topK: number = 10, filterType?: EntityType): Promise<Array<{ node: AIGraphNode; similarity: number }>> {
+    const queryEmbedding = await this.generateQueryEmbedding(query);
+    
+    const results: Array<{ node: AIGraphNode; similarity: number }> = [];
+    
+    for (const node of this.nodes.values()) {
+      if (filterType && node.type !== filterType) continue;
+      if (!node.embedding) continue;
+      
+      const similarity = this.cosineSimilarity(queryEmbedding, node.embedding);
+      results.push({ node, similarity });
+    }
+    
+    results.sort((a, b) => b.similarity - a.similarity);
+    return results.slice(0, topK);
+  }
+
+  async findSimilarNodes(nodeId: string, topK: number = 5, includeConnections: boolean = true): Promise<Array<{ node: AIGraphNode; similarity: number; connectionType?: 'direct' | 'indirect' }>> {
+    const sourceNode = this.nodes.get(nodeId);
+    if (!sourceNode || !sourceNode.embedding) return [];
+    
+    const results: Array<{ node: AIGraphNode; similarity: number; connectionType?: 'direct' | 'indirect' }> = [];
+    const directConnections = new Set(sourceNode.connections);
+    
+    for (const [id, node] of this.nodes.entries()) {
+      if (id === nodeId) continue;
+      if (!node.embedding) continue;
+      
+      const similarity = this.cosineSimilarity(sourceNode.embedding, node.embedding);
+      const connectionType = directConnections.has(id) ? 'direct' : 'indirect';
+      
+      if (!includeConnections && connectionType === 'direct') continue;
+      
+      results.push({ node, similarity, connectionType });
+    }
+    
+    results.sort((a, b) => {
+      if (a.connectionType === 'direct' && b.connectionType !== 'direct') return -1;
+      if (a.connectionType !== 'direct' && b.connectionType === 'direct') return 1;
+      return b.similarity - a.similarity;
+    });
+    
+    return results.slice(0, topK);
+  }
+
+  async clusterNodes(minSimilarity: number = 0.7): Promise<Map<string, string[]>> {
+    const clusters = new Map<string, string[]>();
+    const assigned = new Set<string>();
+    
+    const nodesWithEmbeddings = Array.from(this.nodes.values()).filter(n => n.embedding);
+    
+    for (const node of nodesWithEmbeddings) {
+      if (assigned.has(node.id)) continue;
+      
+      const cluster: string[] = [node.id];
+      assigned.add(node.id);
+      
+      for (const otherNode of nodesWithEmbeddings) {
+        if (assigned.has(otherNode.id)) continue;
+        if (!node.embedding || !otherNode.embedding) continue;
+        
+        const similarity = this.cosineSimilarity(node.embedding, otherNode.embedding);
+        if (similarity >= minSimilarity) {
+          cluster.push(otherNode.id);
+          assigned.add(otherNode.id);
+        }
+      }
+      
+      if (cluster.length > 1) {
+        clusters.set(node.id, cluster);
+      }
+    }
+    
+    return clusters;
+  }
+
+  private prepareTextForEmbedding(entity: Entity): string {
+    const parts: string[] = [];
+    
+    parts.push(`Type: ${entity.type}`);
+    parts.push(`Name: ${entity.name}`);
+    
+    if (entity.description) {
+      parts.push(`Description: ${entity.description}`);
+    }
+    
+    if (entity.content) {
+      const contentPreview = entity.content.slice(0, 500);
+      parts.push(`Content: ${contentPreview}`);
+    }
+    
+    if (entity.tags.length > 0) {
+      parts.push(`Tags: ${entity.tags.join(', ')}`);
+    }
+    
+    if (entity.metadata && Object.keys(entity.metadata).length > 0) {
+      const metadataStr = JSON.stringify(entity.metadata).slice(0, 200);
+      parts.push(`Metadata: ${metadataStr}`);
+    }
+    
+    return parts.join('\n');
+  }
+
+  private async generateQueryEmbedding(query: string): Promise<number[]> {
+    const cacheKey = `query-${query}`;
+    
+    if (this.embeddingCache.has(cacheKey)) {
+      return this.embeddingCache.get(cacheKey)!;
+    }
+
+    try {
+      const prompt = window.spark.llmPrompt`Generate a semantic embedding for this search query:
+
+${query}
+
+Return ONLY a JSON array of ${this.embeddingDimension} floating point numbers representing the embedding vector. No other text.`;
+
+      const embeddingResponse = await window.spark.llm(prompt, 'gpt-4o-mini', true);
+      const embeddingData = JSON.parse(embeddingResponse);
+      
+      let embedding: number[];
+      if (embeddingData.embedding && Array.isArray(embeddingData.embedding)) {
+        embedding = embeddingData.embedding;
+      } else if (Array.isArray(embeddingData)) {
+        embedding = embeddingData;
+      } else {
+        embedding = this.generateSimpleEmbedding(query);
+      }
+
+      if (embedding.length !== this.embeddingDimension) {
+        embedding = this.normalizeEmbedding(embedding, this.embeddingDimension);
+      }
+      
+      this.embeddingCache.set(cacheKey, embedding);
+      return embedding;
+    } catch (error) {
+      console.warn('Failed to generate query embedding, using fallback:', error);
+      const fallbackEmbedding = this.generateSimpleEmbedding(query);
+      this.embeddingCache.set(cacheKey, fallbackEmbedding);
+      return fallbackEmbedding;
+    }
+  }
+
+  private generateSimpleEmbedding(text: string): number[] {
+    const embedding = new Array(this.embeddingDimension).fill(0);
+    const words = text.toLowerCase().split(/\s+/);
+    
+    words.forEach((word, index) => {
+      for (let i = 0; i < word.length; i++) {
+        const charCode = word.charCodeAt(i);
+        const embeddingIndex = (charCode * (index + 1)) % this.embeddingDimension;
+        embedding[embeddingIndex] += 1.0 / (index + 1);
+      }
+    });
+    
+    const magnitude = Math.sqrt(embedding.reduce((sum, val) => sum + val * val, 0));
+    return embedding.map(val => magnitude > 0 ? val / magnitude : 0);
+  }
+
+  private normalizeEmbedding(embedding: number[], targetDimension: number): number[] {
+    if (embedding.length === targetDimension) return embedding;
+    
+    const normalized = new Array(targetDimension).fill(0);
+    
+    if (embedding.length < targetDimension) {
+      for (let i = 0; i < embedding.length; i++) {
+        normalized[i] = embedding[i];
+      }
+    } else {
+      const ratio = embedding.length / targetDimension;
+      for (let i = 0; i < targetDimension; i++) {
+        const startIdx = Math.floor(i * ratio);
+        const endIdx = Math.floor((i + 1) * ratio);
+        let sum = 0;
+        for (let j = startIdx; j < endIdx; j++) {
+          sum += embedding[j];
+        }
+        normalized[i] = sum / (endIdx - startIdx);
+      }
+    }
+    
+    const magnitude = Math.sqrt(normalized.reduce((sum, val) => sum + val * val, 0));
+    return normalized.map(val => magnitude > 0 ? val / magnitude : 0);
+  }
+
+  private cosineSimilarity(a: number[], b: number[]): number {
+    if (a.length !== b.length) return 0;
+    
+    let dotProduct = 0;
+    let magnitudeA = 0;
+    let magnitudeB = 0;
+    
+    for (let i = 0; i < a.length; i++) {
+      dotProduct += a[i] * b[i];
+      magnitudeA += a[i] * a[i];
+      magnitudeB += b[i] * b[i];
+    }
+    
+    magnitudeA = Math.sqrt(magnitudeA);
+    magnitudeB = Math.sqrt(magnitudeB);
+    
+    if (magnitudeA === 0 || magnitudeB === 0) return 0;
+    
+    return dotProduct / (magnitudeA * magnitudeB);
   }
 
   clearExpiredSessions(): number {
