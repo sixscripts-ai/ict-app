@@ -6,7 +6,10 @@ import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
-import { Brain, TrendUp, TrendDown, CheckCircle, Warning, Sparkle, Target } from '@phosphor-icons/react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Brain, TrendUp, TrendDown, CheckCircle, Warning, Sparkle, Target, DownloadSimple, Funnel } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import type { Entity, Relationship } from '@/lib/types';
 import {
@@ -15,6 +18,14 @@ import {
   type TrainingPattern,
   type TrainingInsight
 } from '@/lib/ai-trainer';
+import { 
+  exportToCSV, 
+  exportToJSON, 
+  exportFullEntities, 
+  prepareTradeDataForExport,
+  generateExportFilename,
+  type FilteredTradeData 
+} from '@/lib/export-utils';
 
 interface TrainingViewProps {
   entities: Entity[];
@@ -26,6 +37,12 @@ export function TrainingView({ entities, relationships, onEntitySelect }: Traini
   const [trainingModel, setTrainingModel] = useKV<AITrainingModel | null>('ai-training-model', null);
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState(0);
+  const [showFilters, setShowFilters] = useState(false);
+  
+  const [resultFilter, setResultFilter] = useState<string>('all');
+  const [setupFilter, setSetupFilter] = useState<string>('all');
+  const [minRiskReward, setMinRiskReward] = useState<string>('');
+  const [minGrade, setMinGrade] = useState<string>('');
 
   const trades = entities.filter(e => e.type === 'trade');
   const winningTrades = trades.filter(t => 
@@ -38,6 +55,61 @@ export function TrainingView({ entities, relationships, onEntitySelect }: Traini
     t.metadata?.result === 'loss' ||
     t.metadata?.execution?.result === 'LOSS'
   );
+
+  const applyFilters = (tradeList: Entity[]): Entity[] => {
+    return tradeList.filter(trade => {
+      const metadata = trade.metadata || {};
+      const execution = metadata.execution || {};
+      const setup = metadata.setup || {};
+      
+      if (resultFilter !== 'all') {
+        const result = execution.result || metadata.result || '';
+        if (resultFilter === 'win' && !['win', 'WIN', 'positive'].includes(result) && metadata.meta?.example_type !== 'positive') {
+          return false;
+        }
+        if (resultFilter === 'loss' && !['loss', 'LOSS', 'negative'].includes(result) && metadata.meta?.example_type !== 'negative') {
+          return false;
+        }
+      }
+
+      if (setupFilter !== 'all') {
+        const tradeSetup = setup.setup_type || metadata.setup_type || '';
+        if (!tradeSetup.toLowerCase().includes(setupFilter.toLowerCase())) {
+          return false;
+        }
+      }
+
+      if (minRiskReward) {
+        const rr = execution.risk_reward_ratio || metadata.risk_reward || 0;
+        if (rr < parseFloat(minRiskReward)) {
+          return false;
+        }
+      }
+
+      if (minGrade) {
+        const grade = metadata.grade || execution.grade || 0;
+        if (grade < parseFloat(minGrade)) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  };
+
+  const filteredTrades = applyFilters(trades);
+  const activeFiltersCount = [
+    resultFilter !== 'all',
+    setupFilter !== 'all',
+    minRiskReward !== '',
+    minGrade !== ''
+  ].filter(Boolean).length;
+
+  const uniqueSetups = Array.from(new Set(
+    trades
+      .map(t => t.metadata?.setup?.setup_type || t.metadata?.setup_type)
+      .filter(Boolean)
+  )).sort();
 
   const runTraining = async () => {
     if (trades.length === 0) {
@@ -74,6 +146,64 @@ export function TrainingView({ entities, relationships, onEntitySelect }: Traini
     }
   };
 
+  const handleExportCSV = () => {
+    try {
+      const tradeData = prepareTradeDataForExport(filteredTrades);
+      const filters = {
+        result: resultFilter !== 'all' ? resultFilter : undefined,
+        setup: setupFilter !== 'all' ? setupFilter : undefined,
+        riskReward: minRiskReward ? parseFloat(minRiskReward) : undefined,
+        grade: minGrade ? parseFloat(minGrade) : undefined
+      };
+      const filename = generateExportFilename('ict-trades', 'csv', filters);
+      exportToCSV(tradeData, filename);
+      toast.success(`Exported ${tradeData.length} trades to CSV`);
+    } catch (error) {
+      toast.error('Export failed', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  };
+
+  const handleExportJSON = () => {
+    try {
+      const tradeData = prepareTradeDataForExport(filteredTrades);
+      const filters = {
+        result: resultFilter !== 'all' ? resultFilter : undefined,
+        setup: setupFilter !== 'all' ? setupFilter : undefined,
+        riskReward: minRiskReward ? parseFloat(minRiskReward) : undefined,
+        grade: minGrade ? parseFloat(minGrade) : undefined
+      };
+      const filename = generateExportFilename('ict-trades', 'json', filters);
+      exportToJSON(tradeData, filename);
+      toast.success(`Exported ${tradeData.length} trades to JSON`);
+    } catch (error) {
+      toast.error('Export failed', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  };
+
+  const handleExportFullJSON = () => {
+    try {
+      const filename = `ict-entities-full-${new Date().toISOString().split('T')[0]}.json`;
+      exportFullEntities(filteredTrades, filename);
+      toast.success(`Exported ${filteredTrades.length} full entity records to JSON`);
+    } catch (error) {
+      toast.error('Export failed', {
+        description: error instanceof Error ? error.message : 'Unknown error'
+      });
+    }
+  };
+
+  const clearFilters = () => {
+    setResultFilter('all');
+    setSetupFilter('all');
+    setMinRiskReward('');
+    setMinGrade('');
+    toast.info('Filters cleared');
+  };
+
   const getPriorityColor = (priority: string) => {
     switch (priority) {
       case 'high': return 'text-destructive';
@@ -106,16 +236,147 @@ export function TrainingView({ entities, relationships, onEntitySelect }: Traini
           </p>
         </div>
         
-        <Button
-          onClick={runTraining}
-          disabled={isTraining || trades.length === 0}
-          className="gap-2"
-          size="lg"
-        >
-          <Sparkle size={20} />
-          {isTraining ? 'Training...' : trainingModel ? 'Retrain Model' : 'Train AI Model'}
-        </Button>
+        <div className="flex items-center gap-3">
+          <Button
+            onClick={() => setShowFilters(!showFilters)}
+            variant="outline"
+            className="gap-2"
+            size="lg"
+          >
+            <Funnel size={20} />
+            Filters
+            {activeFiltersCount > 0 && (
+              <Badge variant="default" className="ml-1 h-5 w-5 p-0 flex items-center justify-center">
+                {activeFiltersCount}
+              </Badge>
+            )}
+          </Button>
+
+          <Button
+            onClick={runTraining}
+            disabled={isTraining || trades.length === 0}
+            className="gap-2"
+            size="lg"
+          >
+            <Sparkle size={20} />
+            {isTraining ? 'Training...' : trainingModel ? 'Retrain Model' : 'Train AI Model'}
+          </Button>
+        </div>
       </div>
+
+      {showFilters && (
+        <Card className="p-6 bg-card/50">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="font-semibold flex items-center gap-2">
+              <Funnel size={20} className="text-primary" />
+              Filter Trade Data
+            </h3>
+            {activeFiltersCount > 0 && (
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Clear All
+              </Button>
+            )}
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
+            <div className="space-y-2">
+              <Label htmlFor="result-filter">Result</Label>
+              <Select value={resultFilter} onValueChange={setResultFilter}>
+                <SelectTrigger id="result-filter">
+                  <SelectValue placeholder="All results" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Results</SelectItem>
+                  <SelectItem value="win">Wins Only</SelectItem>
+                  <SelectItem value="loss">Losses Only</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="setup-filter">Setup Type</Label>
+              <Select value={setupFilter} onValueChange={setSetupFilter}>
+                <SelectTrigger id="setup-filter">
+                  <SelectValue placeholder="All setups" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Setups</SelectItem>
+                  {uniqueSetups.map(setup => (
+                    <SelectItem key={setup} value={setup}>
+                      {setup}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="rr-filter">Min Risk/Reward</Label>
+              <Input
+                id="rr-filter"
+                type="number"
+                step="0.1"
+                min="0"
+                placeholder="e.g., 2.0"
+                value={minRiskReward}
+                onChange={(e) => setMinRiskReward(e.target.value)}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="grade-filter">Min Quality Grade</Label>
+              <Input
+                id="grade-filter"
+                type="number"
+                step="0.5"
+                min="0"
+                max="10"
+                placeholder="e.g., 7.5"
+                value={minGrade}
+                onChange={(e) => setMinGrade(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="flex items-center justify-between pt-4 border-t border-border/50">
+            <p className="text-sm text-muted-foreground">
+              {filteredTrades.length} of {trades.length} trades match current filters
+            </p>
+
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={handleExportCSV}
+                disabled={filteredTrades.length === 0}
+                variant="outline"
+                className="gap-2"
+              >
+                <DownloadSimple size={18} />
+                Export CSV
+              </Button>
+
+              <Button
+                onClick={handleExportJSON}
+                disabled={filteredTrades.length === 0}
+                variant="outline"
+                className="gap-2"
+              >
+                <DownloadSimple size={18} />
+                Export JSON
+              </Button>
+
+              <Button
+                onClick={handleExportFullJSON}
+                disabled={filteredTrades.length === 0}
+                variant="outline"
+                className="gap-2"
+              >
+                <DownloadSimple size={18} />
+                Full Export
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {isTraining && (
         <Card className="p-6 bg-card/50">
