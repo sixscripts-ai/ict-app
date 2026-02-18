@@ -223,24 +223,58 @@ function App() {
   };
 
   const handleAskQuestion = async (question: string): Promise<{ answer: string; sources: Entity[] }> => {
-    const prompt = window.spark.llmPrompt`You are an ICT (Inner Circle Trader) trading methodology expert assistant. Answer the following question based on the knowledge base of entities provided.
+    const conceptEntities = safeEntities.filter(e => e.type === 'concept').slice(0, 15);
+    const modelEntities = safeEntities.filter(e => e.type === 'model').slice(0, 10);
+    const tradeEntities = safeEntities.filter(e => e.type === 'trade').slice(0, 10);
+    
+    const prompt = window.spark.llmPrompt`You are an ICT (Inner Circle Trader) methodology expert. Answer technical questions with precision and depth.
 
 Question: ${question}
 
-Available entities in the knowledge base:
-${JSON.stringify(safeEntities.slice(0, 20).map(e => ({
+Knowledge Base Context:
+
+Concepts Available (${conceptEntities.length}):
+${JSON.stringify(conceptEntities.map(e => ({
   name: e.name,
-  type: e.type,
-  description: e.description
+  description: e.description,
+  domain: e.domain
 })), null, 2)}
 
-Provide a clear, concise answer. If you find relevant entities, mention them by name.`;
+Models Available (${modelEntities.length}):
+${JSON.stringify(modelEntities.map(e => ({
+  name: e.name,
+  description: e.description,
+  domain: e.domain
+})), null, 2)}
+
+Recent Trades (${tradeEntities.length}):
+${JSON.stringify(tradeEntities.map(e => ({
+  name: e.name,
+  description: e.description,
+  metadata: e.metadata
+})), null, 2)}
+
+All Relationships:
+${JSON.stringify(safeRelationships.slice(0, 30).map(r => ({
+  type: r.type,
+  from: safeEntities.find(e => e.id === r.sourceId)?.name,
+  to: safeEntities.find(e => e.id === r.targetId)?.name
+})), null, 2)}
+
+Instructions:
+- For concept definitions: Provide precise ICT terminology with bearish/bullish context
+- For trade filters: Query the actual trade data and provide specific results with metrics
+- For model questions: Detail entry criteria, time windows, confluence requirements
+- For pattern analysis: Reference specific relationships and training data
+- Always cite entity names when referencing knowledge base items
+- Use technical ICT language (displacement, liquidity sweep, OTE, killzones, etc.)`;
 
     const answer = await window.spark.llm(prompt, 'gpt-4o');
 
     const relevantSources = safeEntities.filter(e => 
-      answer.toLowerCase().includes(e.name.toLowerCase())
-    ).slice(0, 3);
+      answer.toLowerCase().includes(e.name.toLowerCase()) ||
+      (e.description && answer.toLowerCase().includes(e.description.toLowerCase().slice(0, 20)))
+    ).slice(0, 5);
 
     return { answer, sources: relevantSources };
   };

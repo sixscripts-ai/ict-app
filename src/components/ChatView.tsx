@@ -64,10 +64,14 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
   };
 
   const exampleQuestions = [
-    "What is a Fair Value Gap?",
-    "Show me all trades that used Order Block + FVG confluence",
-    "Which concepts does the Silver Bullet model require?",
-    "List all positive training examples"
+    "Define Fair Value Gap with bearish/bullish displacement examples.",
+    "Filter trades: OB + FVG confluence resulting in >2R returns.",
+    "List the entry criteria and time windows for the Silver Bullet setup.",
+    "Show me high-probability A+ Setups from my training data.",
+    "Which trades failed due to liquidity sweep invalidation?",
+    "Compare win rates: London vs NY killzone executions.",
+    "Show all Model 12 setups with OTE retracement confluence.",
+    "What displacement characteristics preceded my best FVG entries?"
   ];
 
   return (
@@ -84,9 +88,9 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
               <Brain size={32} className="text-accent" />
             </div>
             <div>
-              <h3 className="text-lg font-semibold">Ask me anything</h3>
+              <h3 className="text-lg font-semibold">ICT Knowledge Analysis</h3>
               <p className="text-sm text-muted-foreground mt-1">
-                I can help you search and understand your ICT trading methodology
+                Query concepts, filter trade setups, analyze patterns, and explore model relationships
               </p>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-6">
