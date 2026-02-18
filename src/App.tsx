@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useKV } from '@github/spark/hooks';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
@@ -14,6 +14,7 @@ import { TrainingView } from '@/components/TrainingView';
 import { EntityDetailDialog } from '@/components/EntityDetailDialog';
 import { processFile } from '@/lib/ai-processor';
 import { generateDemoData } from '@/lib/demo-data';
+import { createAIGraphInternal } from '@/lib/schema';
 import type { Entity, Relationship, Upload as UploadType, FileProcessingLog, DatabaseStats, DomainType, EntityType } from '@/lib/types';
 
 function App() {
@@ -21,15 +22,37 @@ function App() {
   const [relationships, setRelationships] = useKV<Relationship[]>('ict-relationships', []);
   const [uploads, setUploads] = useKV<UploadType[]>('ict-uploads', []);
   const [logs, setLogs] = useKV<FileProcessingLog[]>('ict-logs', []);
+  const [chatMessages, setChatMessages] = useKV<import('@/lib/types').ChatMessage[]>('chat-history', []);
   
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
 
+  const aiGraphRef = useRef(createAIGraphInternal());
+  const sessionIdRef = useRef(`session-${Date.now()}`);
+
   const safeEntities = entities || [];
   const safeRelationships = relationships || [];
   const safeUploads = uploads || [];
   const safeLogs = logs || [];
+  const safeChatMessages = chatMessages || [];
+
+  useEffect(() => {
+    if (safeEntities.length > 0 || safeRelationships.length > 0) {
+      aiGraphRef.current.buildFromEntities(safeEntities, safeRelationships);
+    }
+  }, [safeEntities, safeRelationships]);
+
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      const cleared = aiGraphRef.current.clearExpiredSessions();
+      if (cleared > 0) {
+        console.log(`Cleared ${cleared} expired AI session(s)`);
+      }
+    }, 60 * 60 * 1000);
+
+    return () => clearInterval(intervalId);
+  }, []);
 
   const handleFileUpload = async (files: FileList) => {
     const uploadId = `upload-${Date.now()}`;
@@ -223,10 +246,34 @@ function App() {
   };
 
   const handleAskQuestion = async (question: string): Promise<{ answer: string; sources: Entity[] }> => {
+    const sessionId = sessionIdRef.current;
+    const aiGraph = aiGraphRef.current;
+    
+    aiGraph.createOrUpdateSession(sessionId, safeChatMessages, safeEntities);
+    const session = aiGraph.getSession(sessionId);
+    
+    if (session) {
+      const logicFlow = aiGraph.buildLogicFlow(question, session);
+      console.log('Logic Flow:', logicFlow);
+    }
+
     const conceptEntities = safeEntities.filter(e => e.type === 'concept').slice(0, 15);
     const modelEntities = safeEntities.filter(e => e.type === 'model').slice(0, 10);
     const tradeEntities = safeEntities.filter(e => e.type === 'trade').slice(0, 10);
     
+    const enrichmentContext = Array.from({ length: Math.min(3, safeEntities.length) }, (_, i) => {
+      const entity = safeEntities[i];
+      if (entity.content && entity.type === 'document') {
+        const enrichment = aiGraph.enrichFromMarkdown(entity.name, entity.content);
+        return {
+          concepts: enrichment.extractedConcepts,
+          relationships: enrichment.extractedRelationships.length,
+          complexity: enrichment.metadata.technicalComplexity
+        };
+      }
+      return null;
+    }).filter(Boolean);
+
     const prompt = window.spark.llmPrompt`You are an ICT (Inner Circle Trader) methodology expert. Answer technical questions with precision and depth.
 
 Question: ${question}
@@ -260,6 +307,19 @@ ${JSON.stringify(safeRelationships.slice(0, 30).map(r => ({
   from: safeEntities.find(e => e.id === r.sourceId)?.name,
   to: safeEntities.find(e => e.id === r.targetId)?.name
 })), null, 2)}
+
+${session ? `
+Session Context:
+- Conversation Topic: ${session.context.conversationTopic || 'general'}
+- Intent: ${session.context.inferredIntent || 'unknown'}
+- Referenced Concepts: ${Array.from(session.context.referencedConcepts.keys()).join(', ')}
+- Confidence: ${(session.reasoning.confidenceScore * 100).toFixed(0)}%
+` : ''}
+
+${enrichmentContext.length > 0 ? `
+Document Enrichment:
+${JSON.stringify(enrichmentContext, null, 2)}
+` : ''}
 
 Instructions:
 - For concept definitions: Provide precise ICT terminology with bearish/bullish context
