@@ -3,7 +3,7 @@ import { useKV } from '@github/spark/hooks';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, Sparkle } from '@phosphor-icons/react';
+import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, Sparkle, MagicWand } from '@phosphor-icons/react';
 import { DashboardView } from '@/components/DashboardView';
 import { ExplorerView } from '@/components/ExplorerView';
 import { UploadView } from '@/components/UploadView';
@@ -12,6 +12,7 @@ import { GraphView } from '@/components/GraphView';
 import { PatternsView } from '@/components/PatternsView';
 import { TrainingView } from '@/components/TrainingView';
 import { SemanticSearchView } from '@/components/SemanticSearchView';
+import { RecommendationsView } from '@/components/RecommendationsView';
 import { EntityDetailDialog } from '@/components/EntityDetailDialog';
 import { processFile } from '@/lib/ai-processor';
 import { generateDemoData } from '@/lib/demo-data';
@@ -421,6 +422,10 @@ Instructions:
               <GraduationCap size={16} />
               Training
             </TabsTrigger>
+            <TabsTrigger value="recommendations" className="gap-2">
+              <MagicWand size={16} />
+              Recommendations
+            </TabsTrigger>
             <TabsTrigger value="upload" className="gap-2">
               <Upload size={16} />
               Upload
@@ -470,6 +475,15 @@ Instructions:
             <TrainingView
               entities={safeEntities}
               relationships={safeRelationships}
+              onEntitySelect={handleEntitySelect}
+            />
+          </TabsContent>
+
+          <TabsContent value="recommendations">
+            <RecommendationsView
+              entities={safeEntities}
+              relationships={safeRelationships}
+              aiGraph={aiGraphRef.current}
               onEntitySelect={handleEntitySelect}
             />
           </TabsContent>
