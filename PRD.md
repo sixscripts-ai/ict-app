@@ -54,6 +54,13 @@ This is a full-featured knowledge management system with AI agent processing, mu
 - **Progression**: Button click → Progress indicator (0-100%) → AI analyzes all trades → Pattern detection (concept combinations, session performance, pair specialization) → Concept/model scoring → Quality factor identification → Insight generation via LLM → Results display in tabs (Overview, Insights, Patterns, Concept Scores, Model Performance, Quality Factors) → User reviews personalized recommendations
 - **Success criteria**: Training completes within 30 seconds, patterns match actual trade data, insights are specific and actionable, win rates accurately calculated per concept/model, personalized profile shows trader's strengths/weaknesses clearly
 
+### Agent Skills System
+- **Functionality**: Modular framework providing 16+ specialized AI-powered capabilities for querying, analyzing, and learning from the knowledge base; includes concept definitions, trade filtering, pattern recognition, failure analysis, confluence detection, killzone performance, risk/reward analysis, and personalized recommendations; each skill has defined parameters, complexity levels, execution contexts, and standardized result formats with confidence scores
+- **Purpose**: Provides structured, reusable analysis capabilities that combine the power of the AI graph with specialized domain logic; enables users to execute complex queries without writing code
+- **Trigger**: User navigates to Skills tab, selects a skill from the registry, enters parameters, and clicks execute
+- **Progression**: Browse skills by category (Query, Analysis, Learning, Recommendation) → Select skill → View description and examples → Enter parameters → Execute → View results with confidence score → Review reasoning and sources → Follow suggested next actions → Navigate to referenced entities
+- **Success criteria**: All 16 built-in skills execute successfully, results include confidence scores and source citations, suggested follow-ups are relevant, execution history is tracked, performance metrics are calculated
+
 ### Real-Time Processing Feedback
 - **Functionality**: Live feed showing file-by-file parsing progress, entity extraction counts, validation results, warnings/errors
 - **Purpose**: Provides transparency during potentially long ingestion processes; builds trust in AI decisions

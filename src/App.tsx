@@ -3,7 +3,7 @@ import { useKV } from '@github/spark/hooks';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, Sparkle, MagicWand } from '@phosphor-icons/react';
+import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, Sparkle, MagicWand, Lightning } from '@phosphor-icons/react';
 import { DashboardView } from '@/components/DashboardView';
 import { ExplorerView } from '@/components/ExplorerView';
 import { UploadView } from '@/components/UploadView';
@@ -13,6 +13,7 @@ import { PatternsView } from '@/components/PatternsView';
 import { TrainingView } from '@/components/TrainingView';
 import { SemanticSearchView } from '@/components/SemanticSearchView';
 import { RecommendationsView } from '@/components/RecommendationsView';
+import { SkillsView } from '@/components/SkillsView';
 import { EntityDetailDialog } from '@/components/EntityDetailDialog';
 import { processFile } from '@/lib/ai-processor';
 import { generateDemoData } from '@/lib/demo-data';
@@ -426,6 +427,10 @@ Instructions:
               <MagicWand size={16} />
               Recommendations
             </TabsTrigger>
+            <TabsTrigger value="skills" className="gap-2">
+              <Lightning size={16} />
+              Skills
+            </TabsTrigger>
             <TabsTrigger value="upload" className="gap-2">
               <Upload size={16} />
               Upload
@@ -481,6 +486,15 @@ Instructions:
 
           <TabsContent value="recommendations">
             <RecommendationsView
+              entities={safeEntities}
+              relationships={safeRelationships}
+              aiGraph={aiGraphRef.current}
+              onEntitySelect={handleEntitySelect}
+            />
+          </TabsContent>
+
+          <TabsContent value="skills">
+            <SkillsView
               entities={safeEntities}
               relationships={safeRelationships}
               aiGraph={aiGraphRef.current}
