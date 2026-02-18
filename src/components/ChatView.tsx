@@ -1,10 +1,12 @@
 import { useState, useRef, useEffect } from 'react';
+import { useKV } from '@github/spark/hooks';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
-import { PaperPlaneRight, User, Brain } from '@phosphor-icons/react';
+import { PaperPlaneRight, User, Brain, Trash } from '@phosphor-icons/react';
+import { toast } from 'sonner';
 import type { ChatMessage, Entity } from '@/lib/types';
 
 interface ChatViewProps {
@@ -13,16 +15,18 @@ interface ChatViewProps {
 }
 
 export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [messages, setMessages] = useKV<ChatMessage[]>('chat-history', []);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const safeMessages = messages || [];
 
   useEffect(() => {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [safeMessages]);
 
   const handleSubmit = async () => {
     if (!input.trim() || isLoading) return;
@@ -34,7 +38,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
       timestamp: new Date().toISOString()
     };
 
-    setMessages(prev => [...prev, userMessage]);
+    setMessages((currentMessages) => [...(currentMessages || []), userMessage]);
     setInput('');
     setIsLoading(true);
 
@@ -49,7 +53,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
         timestamp: new Date().toISOString()
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
+      setMessages((currentMessages) => [...(currentMessages || []), assistantMessage]);
     } catch (error) {
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
@@ -57,10 +61,15 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
         content: 'Sorry, I encountered an error processing your question.',
         timestamp: new Date().toISOString()
       };
-      setMessages(prev => [...prev, errorMessage]);
+      setMessages((currentMessages) => [...(currentMessages || []), errorMessage]);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleClearHistory = () => {
+    setMessages([]);
+    toast.success('Chat history cleared');
   };
 
   const exampleQuestions = [
@@ -76,12 +85,25 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
 
   return (
     <div className="flex flex-col h-[calc(100vh-120px)]">
-      <div className="mb-4">
-        <h1 className="text-3xl font-semibold tracking-tight">AI Chat</h1>
-        <p className="text-muted-foreground mt-1">Ask questions about your ICT knowledge base</p>
+      <div className="mb-4 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-semibold tracking-tight">AI Chat</h1>
+          <p className="text-muted-foreground mt-1">Ask questions about your ICT knowledge base</p>
+        </div>
+        {safeMessages.length > 0 && (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={handleClearHistory}
+            className="gap-2"
+          >
+            <Trash size={16} />
+            Clear History
+          </Button>
+        )}
       </div>
 
-      {messages.length === 0 && (
+      {safeMessages.length === 0 && (
         <Card className="p-8 bg-card/50 backdrop-blur border-border/50 mb-4">
           <div className="text-center space-y-4">
             <div className="inline-flex items-center justify-center w-16 h-16 rounded-lg bg-accent/10">
@@ -110,7 +132,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
 
       <ScrollArea className="flex-1 mb-4" ref={scrollRef}>
         <div className="space-y-4">
-          {messages.map((message) => (
+          {safeMessages.map((message) => (
             <div key={message.id} className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
               {message.role === 'assistant' && (
                 <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-accent/10 flex items-center justify-center">
