@@ -5,7 +5,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowsClockwise, MagnifyingGlassMinus, MagnifyingGlassPlus, Target, Path, Play, Pause } from '@phosphor-icons/react';
+import { ArrowsClockwise, MagnifyingGlassMinus, MagnifyingGlassPlus, Target, Path, Play, Pause, Keyboard } from '@phosphor-icons/react';
 import type { Entity, Relationship, EntityType, RelationshipType } from '@/lib/types';
 
 interface GraphViewProps {
@@ -53,6 +53,7 @@ const entityLabels: Record<EntityType, string> = {
 
 export function GraphView({ entities, relationships, onEntitySelect }: GraphViewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number>();
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null);
   
@@ -63,6 +64,8 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
   const [showChainOnly, setShowChainOnly] = useState(false);
   const [animateFlow, setAnimateFlow] = useState(true);
   const [isStable, setIsStable] = useState(false);
+  const [keyboardSelectedNodeIndex, setKeyboardSelectedNodeIndex] = useState<number>(-1);
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
 
   const getChainEntitiesAndRelationships = () => {
     const conceptIds = new Set(entities.filter(e => e.type === 'concept').map(e => e.id));
@@ -373,9 +376,22 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
     node.append('circle')
       .attr('r', 30)
       .attr('fill', d => entityColors[d.type])
-      .attr('stroke', d => d3.color(entityColors[d.type])?.brighter(0.5)?.toString() || entityColors[d.type])
-      .attr('stroke-width', 3)
-      .attr('opacity', 0.9);
+      .attr('stroke', d => {
+        const selectedEntity = keyboardSelectedNodeIndex >= 0 ? filteredEntities[keyboardSelectedNodeIndex] : null;
+        if (selectedEntity && d.id === selectedEntity.id) {
+          return '#ffffff';
+        }
+        return d3.color(entityColors[d.type])?.brighter(0.5)?.toString() || entityColors[d.type];
+      })
+      .attr('stroke-width', d => {
+        const selectedEntity = keyboardSelectedNodeIndex >= 0 ? filteredEntities[keyboardSelectedNodeIndex] : null;
+        if (selectedEntity && d.id === selectedEntity.id) {
+          return 4;
+        }
+        return 3;
+      })
+      .attr('opacity', 0.9)
+      .attr('class', 'graph-node');
 
     node.append('text')
       .attr('text-anchor', 'middle')
@@ -513,7 +529,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [filteredEntities, filteredRelationships, onEntitySelect, focusedNode, animateFlow, isStable]);
+  }, [filteredEntities, filteredRelationships, onEntitySelect, focusedNode, animateFlow, isStable, keyboardSelectedNodeIndex]);
 
   const handleReset = () => {
     if (!svgRef.current) return;
@@ -559,6 +575,213 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
 
   const uniqueTypes = Array.from(new Set(entities.map(e => e.type)));
 
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (!filteredEntities.length) return;
+
+      if (event.key === '?') {
+        event.preventDefault();
+        setShowKeyboardHelp(!showKeyboardHelp);
+        return;
+      }
+
+      if (event.key === 'Escape') {
+        event.preventDefault();
+        if (showKeyboardHelp) {
+          setShowKeyboardHelp(false);
+        } else if (focusedNode) {
+          setFocusedNode(null);
+        } else if (keyboardSelectedNodeIndex >= 0) {
+          setKeyboardSelectedNodeIndex(-1);
+          setHoveredNode(null);
+        }
+        return;
+      }
+
+      if (event.key === 'r' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        handleReset();
+        return;
+      }
+
+      if (event.key === '+' || event.key === '=') {
+        event.preventDefault();
+        handleZoomIn();
+        return;
+      }
+
+      if (event.key === '-' || event.key === '_') {
+        event.preventDefault();
+        handleZoomOut();
+        return;
+      }
+
+      if (event.key === '0' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        handleReset();
+        return;
+      }
+
+      if (event.key === 'c' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        setShowChainOnly(!showChainOnly);
+        return;
+      }
+
+      if (event.key === 'a' && (event.ctrlKey || event.metaKey)) {
+        event.preventDefault();
+        setAnimateFlow(!animateFlow);
+        return;
+      }
+
+      if (event.key === 'Tab') {
+        event.preventDefault();
+        const nextIndex = event.shiftKey
+          ? (keyboardSelectedNodeIndex - 1 + filteredEntities.length) % filteredEntities.length
+          : (keyboardSelectedNodeIndex + 1) % filteredEntities.length;
+        
+        setKeyboardSelectedNodeIndex(nextIndex);
+        const selectedNode = filteredEntities[nextIndex];
+        const graphNode = {
+          id: selectedNode.id,
+          type: selectedNode.type,
+          name: selectedNode.name,
+          entity: selectedNode
+        } as GraphNode;
+        setHoveredNode(graphNode);
+        
+        if (svgRef.current && simulationRef.current) {
+          const nodes = simulationRef.current.nodes();
+          const node = nodes.find(n => n.id === selectedNode.id);
+          if (node && node.x && node.y) {
+            centerOnNode(node);
+          }
+        }
+        return;
+      }
+
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+        event.preventDefault();
+        
+        if (keyboardSelectedNodeIndex < 0) {
+          setKeyboardSelectedNodeIndex(0);
+          const selectedNode = filteredEntities[0];
+          const graphNode = {
+            id: selectedNode.id,
+            type: selectedNode.type,
+            name: selectedNode.name,
+            entity: selectedNode
+          } as GraphNode;
+          setHoveredNode(graphNode);
+          return;
+        }
+
+        const currentEntity = filteredEntities[keyboardSelectedNodeIndex];
+        if (!currentEntity) return;
+
+        const nodes = simulationRef.current?.nodes() || [];
+        const currentNode = nodes.find(n => n.id === currentEntity.id);
+        if (!currentNode || !currentNode.x || !currentNode.y) return;
+
+        let closestNode: GraphNode | null = null;
+        let minDistance = Infinity;
+
+        nodes.forEach(node => {
+          if (node.id === currentNode.id || !node.x || !node.y) return;
+
+          const dx = node.x - currentNode.x;
+          const dy = node.y - currentNode.y;
+          const distance = Math.sqrt(dx * dx + dy * dy);
+          const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+
+          let isInDirection = false;
+          switch (event.key) {
+            case 'ArrowRight':
+              isInDirection = angle > -45 && angle < 45;
+              break;
+            case 'ArrowDown':
+              isInDirection = angle > 45 && angle < 135;
+              break;
+            case 'ArrowLeft':
+              isInDirection = angle > 135 || angle < -135;
+              break;
+            case 'ArrowUp':
+              isInDirection = angle > -135 && angle < -45;
+              break;
+          }
+
+          if (isInDirection && distance < minDistance) {
+            minDistance = distance;
+            closestNode = node;
+          }
+        });
+
+        if (closestNode) {
+          const newIndex = filteredEntities.findIndex(e => e.id === closestNode!.id);
+          if (newIndex >= 0) {
+            setKeyboardSelectedNodeIndex(newIndex);
+            setHoveredNode(closestNode);
+            centerOnNode(closestNode);
+          }
+        }
+        return;
+      }
+
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        if (keyboardSelectedNodeIndex >= 0) {
+          const selectedEntity = filteredEntities[keyboardSelectedNodeIndex];
+          if (event.shiftKey) {
+            const graphNode = {
+              id: selectedEntity.id,
+              type: selectedEntity.type,
+              name: selectedEntity.name,
+              entity: selectedEntity
+            } as GraphNode;
+            if (focusedNode?.id === graphNode.id) {
+              setFocusedNode(null);
+            } else {
+              setFocusedNode(graphNode);
+            }
+          } else {
+            onEntitySelect(selectedEntity);
+          }
+        }
+        return;
+      }
+
+      if (event.key >= '1' && event.key <= '9') {
+        const typeIndex = parseInt(event.key) - 1;
+        if (typeIndex < uniqueTypes.length) {
+          handleTypeFilter(uniqueTypes[typeIndex]);
+        }
+        return;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [filteredEntities, keyboardSelectedNodeIndex, focusedNode, showKeyboardHelp, showChainOnly, animateFlow, uniqueTypes]);
+
+  const centerOnNode = (node: GraphNode) => {
+    if (!svgRef.current || !node.x || !node.y) return;
+    
+    const svg = d3.select(svgRef.current);
+    const width = svgRef.current.clientWidth;
+    const height = svgRef.current.clientHeight;
+    
+    const scale = zoom;
+    const x = -node.x * scale + width / 2;
+    const y = -node.y * scale + height / 2;
+    
+    svg.transition()
+      .duration(500)
+      .call(
+        d3.zoom<SVGSVGElement, unknown>().transform as any,
+        d3.zoomIdentity.translate(x, y).scale(scale)
+      );
+  };
+
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-12rem)]">
       <div className="flex items-center justify-between gap-4">
@@ -591,6 +814,17 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         </div>
 
         <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowKeyboardHelp(!showKeyboardHelp)}
+            className="gap-2"
+            title="Keyboard shortcuts (Press ?)"
+          >
+            <span className="text-lg font-bold">?</span>
+            Shortcuts
+          </Button>
+
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-card/50 border border-border">
             <Label htmlFor="animate-flow" className="text-xs cursor-pointer">
               Animate Flow
@@ -651,20 +885,148 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       </div>
 
       <Card className="flex-1 relative overflow-hidden bg-card/50 border-border/50">
+        {keyboardSelectedNodeIndex >= 0 && (
+          <div className="absolute top-2 right-2 bg-primary/90 text-primary-foreground px-3 py-1.5 rounded-lg text-xs font-medium flex items-center gap-2 z-10 shadow-lg backdrop-blur">
+            <Keyboard size={14} weight="bold" />
+            <span>Keyboard Navigation Active</span>
+            <kbd className="px-1.5 py-0.5 bg-primary-foreground/20 rounded text-[10px] font-mono">Esc</kbd>
+            <span className="opacity-70">to exit</span>
+          </div>
+        )}
+        
         <svg
           ref={svgRef}
           className="w-full h-full"
           style={{ background: 'radial-gradient(circle at center, oklch(0.18 0.02 264) 0%, oklch(0.15 0.02 264) 100%)' }}
+          role="img"
+          aria-label="Knowledge graph visualization"
+          tabIndex={0}
         />
+
+        {showKeyboardHelp && (
+          <div className="absolute inset-0 bg-background/95 backdrop-blur-md flex items-center justify-center z-50" onClick={() => setShowKeyboardHelp(false)}>
+            <Card className="max-w-2xl w-full m-4 p-6 bg-card border-2 border-primary/50 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-6">
+                <h3 className="text-2xl font-bold text-primary">Keyboard Shortcuts</h3>
+                <Button variant="ghost" size="sm" onClick={() => setShowKeyboardHelp(false)}>
+                  <span className="text-xl">×</span>
+                </Button>
+              </div>
+              
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 text-accent uppercase tracking-wider">Navigation</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Arrow Keys</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">↑ ↓ ← →</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70 mb-3">Navigate between nodes in direction</p>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Tab / Shift+Tab</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">⇥</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70 mb-3">Cycle through all nodes</p>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Enter / Space</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">↵</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70 mb-3">View selected node details</p>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Shift+Enter</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">⇧↵</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70">Focus node connections</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 text-accent uppercase tracking-wider">View Control</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Zoom In</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">+</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70 mb-3">Increase zoom level</p>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Zoom Out</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">-</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70 mb-3">Decrease zoom level</p>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Reset View</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">Ctrl+R</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70 mb-3">Reset zoom and position</p>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Escape</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">Esc</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70">Clear selection/focus</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 text-accent uppercase tracking-wider">Filters</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Number Keys</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">1-9</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70 mb-3">Toggle entity type filters</p>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Chain View</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">Ctrl+C</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70 mb-3">Toggle concept→model→trade view</p>
+                    
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Animate Flow</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">Ctrl+A</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70">Toggle animation</p>
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-sm font-semibold mb-3 text-accent uppercase tracking-wider">Help</h4>
+                  <div className="space-y-2 text-sm">
+                    <div className="flex justify-between items-center">
+                      <span className="text-muted-foreground">Show/Hide Shortcuts</span>
+                      <kbd className="px-2 py-1 bg-muted rounded text-xs font-mono">?</kbd>
+                    </div>
+                    <p className="text-xs text-muted-foreground/70">Toggle this help panel</p>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 pt-4 border-t border-border">
+                <p className="text-xs text-muted-foreground text-center">
+                  Press <kbd className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">Esc</kbd> or click outside to close
+                </p>
+              </div>
+            </Card>
+          </div>
+        )}
 
         {hoveredNode && !focusedNode && (
           <div 
             className="absolute top-4 left-4 bg-card/95 border border-border rounded-lg p-4 max-w-xs backdrop-blur-sm shadow-xl"
+            role="status"
+            aria-live="polite"
           >
             <div className="flex items-center gap-2 mb-2">
               <div 
                 className="w-3 h-3 rounded-full"
                 style={{ backgroundColor: entityColors[hoveredNode.type] }}
+                aria-hidden="true"
               />
               <Badge variant="outline" className="text-xs">
                 {entityLabels[hoveredNode.type]}
@@ -678,7 +1040,9 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
             )}
             <div className="mt-3 pt-3 border-t border-border/50">
               <p className="text-xs text-muted-foreground">
-                Click to view details • Shift+Click to focus
+                {keyboardSelectedNodeIndex >= 0 
+                  ? 'Press Enter to view details • Shift+Enter to focus'
+                  : 'Click to view details • Shift+Click to focus'}
               </p>
             </div>
           </div>
@@ -687,12 +1051,16 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         {focusedNode && (
           <div 
             className="absolute top-4 left-4 bg-accent/95 border border-accent rounded-lg p-4 max-w-sm backdrop-blur-sm shadow-xl"
+            role="status"
+            aria-live="polite"
+            aria-label={`Focused on ${focusedNode.name}`}
           >
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-2">
                 <div 
                   className="w-3 h-3 rounded-full"
                   style={{ backgroundColor: entityColors[focusedNode.type] }}
+                  aria-hidden="true"
                 />
                 <Badge variant="outline" className="text-xs bg-accent-foreground/10">
                   {entityLabels[focusedNode.type]}
@@ -703,6 +1071,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
                 size="sm"
                 className="h-6 px-2 text-xs"
                 onClick={() => setFocusedNode(null)}
+                aria-label="Clear focus"
               >
                 Clear
               </Button>
@@ -781,16 +1150,32 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
               ))}
             </div>
           </div>
-          <div>
-            <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Controls</h4>
+          <div className="flex-1">
+            <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Mouse Controls</h4>
             <ul className="text-xs text-foreground/70 space-y-1">
               <li>• Drag nodes to reposition</li>
               <li>• Scroll or pinch to zoom</li>
               <li>• Click node to view details</li>
               <li>• <span className="font-semibold text-accent">Shift+Click</span> node to focus connections</li>
               <li>• Click badges to filter by type</li>
-              <li>• <span className="font-semibold text-accent">Chain View</span> shows only concept→model→trade paths</li>
-              <li>• <span className="font-semibold text-primary">Animate Flow</span> highlights the data flow from concepts to trades</li>
+            </ul>
+          </div>
+          <div className="flex-1">
+            <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Keyboard Navigation</h4>
+            <ul className="text-xs text-foreground/70 space-y-1">
+              <li>• <kbd className="px-1 py-0.5 bg-muted/50 rounded text-[10px] font-mono">Tab</kbd> to cycle through nodes</li>
+              <li>• <kbd className="px-1 py-0.5 bg-muted/50 rounded text-[10px] font-mono">Arrow keys</kbd> to navigate spatially</li>
+              <li>• <kbd className="px-1 py-0.5 bg-muted/50 rounded text-[10px] font-mono">Enter</kbd> to view node details</li>
+              <li>• <kbd className="px-1 py-0.5 bg-muted/50 rounded text-[10px] font-mono">+/-</kbd> to zoom in/out</li>
+              <li>• <kbd className="px-1 py-0.5 bg-muted/50 rounded text-[10px] font-mono">?</kbd> for all keyboard shortcuts</li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="text-xs font-semibold mb-2 text-muted-foreground uppercase tracking-wider">Features</h4>
+            <ul className="text-xs text-foreground/70 space-y-1">
+              <li>• <span className="font-semibold text-accent">Chain View</span> shows concept→model→trade paths</li>
+              <li>• <span className="font-semibold text-primary">Animate Flow</span> highlights data flow</li>
+              <li>• <span className="font-semibold text-primary">White border</span> indicates keyboard selection</li>
             </ul>
           </div>
         </div>
