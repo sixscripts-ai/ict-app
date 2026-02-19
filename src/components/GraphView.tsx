@@ -54,6 +54,7 @@ const entityLabels: Record<EntityType, string> = {
 export function GraphView({ entities, relationships, onEntitySelect }: GraphViewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const animationFrameRef = useRef<number>();
+  const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null);
   
   const [selectedTypes, setSelectedTypes] = useState<EntityType[]>([]);
   const [zoom, setZoom] = useState(1);
@@ -61,6 +62,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
   const [focusedNode, setFocusedNode] = useState<GraphNode | null>(null);
   const [showChainOnly, setShowChainOnly] = useState(false);
   const [animateFlow, setAnimateFlow] = useState(true);
+  const [isStable, setIsStable] = useState(false);
 
   const getChainEntitiesAndRelationships = () => {
     const conceptIds = new Set(entities.filter(e => e.type === 'concept').map(e => e.id));
@@ -198,7 +200,10 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       .force('charge', d3.forceManyBody().strength(-400))
       .force('center', d3.forceCenter(width / 2, height / 2))
       .force('collision', d3.forceCollide().radius(40))
-      .alphaDecay(0.02);
+      .alphaDecay(0.05);
+    
+    simulationRef.current = simulation;
+    setIsStable(false);
 
     const g = svg.append('g');
 
@@ -346,6 +351,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
         d.fy = d.y;
+        setIsStable(false);
       })
       .on('drag', (event, d) => {
         d.fx = event.x;
@@ -453,34 +459,23 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       }
     })
     .on('mouseenter', function(event, d) {
-      if (!focusedNode) {
+      if (!focusedNode && isStable) {
         setHoveredNode(d);
-        const circle = d3.select(this).select('circle');
-        const currentRadius = parseFloat(circle.attr('r'));
-        const currentStrokeWidth = parseFloat(circle.attr('stroke-width'));
-        
-        if (currentRadius === 30) {
-          circle
-            .transition()
-            .duration(200)
-            .attr('r', 35)
-            .attr('stroke-width', 5);
-        }
+        d3.select(this).select('circle')
+          .transition()
+          .duration(200)
+          .attr('r', 35)
+          .attr('stroke-width', 5);
       }
     })
     .on('mouseleave', function(event, d) {
-      if (!focusedNode) {
+      if (!focusedNode && isStable) {
         setHoveredNode(null);
-        const circle = d3.select(this).select('circle');
-        const currentRadius = parseFloat(circle.attr('r'));
-        
-        if (currentRadius === 35) {
-          circle
-            .transition()
-            .duration(200)
-            .attr('r', 30)
-            .attr('stroke-width', 3);
-        }
+        d3.select(this).select('circle')
+          .transition()
+          .duration(200)
+          .attr('r', 30)
+          .attr('stroke-width', 3);
       }
     });
 
@@ -500,8 +495,9 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
 
       node.attr('transform', d => `translate(${d.x},${d.y})`);
       
-      if (tickCount > 300) {
+      if (simulation.alpha() < 0.01 || tickCount > 200) {
         simulation.stop();
+        setIsStable(true);
       }
     });
 
@@ -517,7 +513,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [filteredEntities, filteredRelationships, onEntitySelect, focusedNode, animateFlow]);
+  }, [filteredEntities, filteredRelationships, onEntitySelect, focusedNode, animateFlow, isStable]);
 
   const handleReset = () => {
     if (!svgRef.current) return;
