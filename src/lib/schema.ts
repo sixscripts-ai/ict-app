@@ -312,7 +312,7 @@ export class AIGraphInternal {
     const flowId = `flow-${Date.now()}`;
     const steps: LogicFlowStep[] = [];
 
-    const intent = context.reasoning.inferredIntent || '';
+    const intent = context.context.inferredIntent || '';
 
     if (intent.includes('filter') || intent.includes('search')) {
       steps.push({

@@ -687,7 +687,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         let minDistance = Infinity;
 
         nodes.forEach(node => {
-          if (node.id === currentNode.id || !node.x || !node.y) return;
+          if (node.id === currentNode.id || !node.x || !node.y || !currentNode.x || !currentNode.y) return;
 
           const dx = node.x - currentNode.x;
           const dy = node.y - currentNode.y;

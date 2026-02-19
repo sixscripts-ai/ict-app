@@ -155,7 +155,7 @@ export function exportEntitiesToCSV(entities: Entity[]): void {
     entity.type,
     entity.domain,
     entity.description || '',
-    entity.sourceFile || '',
+    entity.sources?.[0]?.filePath || '',
     entity.createdAt,
     entity.updatedAt || '',
     (entity.tags || []).join('; '),

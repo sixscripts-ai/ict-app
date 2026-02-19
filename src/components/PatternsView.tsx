@@ -13,7 +13,6 @@ import {
   type RelationshipPattern,
   type ConceptPattern 
 } from '@/lib/relationship-analyzer';
-import { marked } from 'marked';
 
 interface PatternsViewProps {
   entities: Entity[];
@@ -560,10 +559,9 @@ export function PatternsView({ entities, relationships, onEntitySelect }: Patter
                   </Button>
                 </div>
                 <ScrollArea className="h-[600px]">
-                  <div 
-                    className="prose prose-invert prose-sm max-w-none"
-                    dangerouslySetInnerHTML={{ __html: marked(aiInsights) as string }}
-                  />
+                  <div className="prose prose-invert prose-sm max-w-none whitespace-pre-wrap">
+                    {aiInsights}
+                  </div>
                 </ScrollArea>
               </Card>
             )}

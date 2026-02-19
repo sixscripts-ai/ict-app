@@ -708,7 +708,7 @@ function extractCommonConditions(trades: Entity[]): string[] {
     const dominantSession = Object.entries(sessionCounts)
       .sort((a, b) => b[1] - a[1])[0];
     
-    if (dominantSession && dominantSession[1] >= trades.length * 0.6) {
+    if (dominantSession && dominantSession[0] && dominantSession[1] >= trades.length * 0.6) {
       conditions.push(`Occurs primarily during ${dominantSession[0]} session`);
     }
   }
@@ -726,7 +726,7 @@ function extractCommonConditions(trades: Entity[]): string[] {
     const dominantPair = Object.entries(pairCounts)
       .sort((a, b) => b[1] - a[1])[0];
     
-    if (dominantPair && dominantPair[1] >= trades.length * 0.5) {
+    if (dominantPair && dominantPair[0] && dominantPair[1] >= trades.length * 0.5) {
       conditions.push(`Most common on ${dominantPair[0]}`);
     }
   }

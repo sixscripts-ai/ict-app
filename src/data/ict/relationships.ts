@@ -7,186 +7,202 @@ export const ICT_RELATIONSHIPS: Relationship[] = [
   {
     id: 'rel-prereq-displacement-fvg',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-displacement',
-    target: 'concept-fvg',
+    sourceId: 'concept-displacement',
+    targetId: 'concept-fvg',
     metadata: {
       description: 'Displacement must be understood before identifying fair value gaps',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-prereq-displacement-orderblock',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-displacement',
-    target: 'concept-order-block',
+    sourceId: 'concept-displacement',
+    targetId: 'concept-order-block',
     metadata: {
       description: 'Displacement is prerequisite to understanding order blocks',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-prereq-displacement-mss',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-displacement',
-    target: 'concept-market-structure',
+    sourceId: 'concept-displacement',
+    targetId: 'concept-market-structure',
     metadata: {
       description: 'Displacement precedes market structure shifts',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-prereq-liquidity-displacement',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-liquidity',
-    target: 'concept-displacement',
+    sourceId: 'concept-liquidity',
+    targetId: 'concept-displacement',
     metadata: {
       description: 'Understanding liquidity is prerequisite to displacement',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-prereq-marketstructure-bos',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-market-structure',
-    target: 'concept-bos',
+    sourceId: 'concept-market-structure',
+    targetId: 'concept-bos',
     metadata: {
       description: 'Market structure understanding precedes break of structure',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-prereq-marketstructure-smsmss',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-market-structure',
-    target: 'concept-sms-mss',
+    sourceId: 'concept-market-structure',
+    targetId: 'concept-sms-mss',
     metadata: {
       description: 'Market structure is prerequisite to understanding shifts',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-prereq-fvg-inversionfvg',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-fvg',
-    target: 'concept-inversion-fvg',
+    sourceId: 'concept-fvg',
+    targetId: 'concept-inversion-fvg',
     metadata: {
       description: 'FVG understanding precedes inversion FVG',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-prereq-fvg-pdarray',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-fvg',
-    target: 'concept-pd-array',
+    sourceId: 'concept-fvg',
+    targetId: 'concept-pd-array',
     metadata: {
       description: 'FVG is prerequisite to PD array understanding',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-prereq-orderblock-breakerblock',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-order-block',
-    target: 'concept-breaker-block',
+    sourceId: 'concept-order-block',
+    targetId: 'concept-breaker-block',
     metadata: {
       description: 'Order block understanding precedes breaker blocks',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-prereq-orderblock-pdarray',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-order-block',
-    target: 'concept-pd-array',
+    sourceId: 'concept-order-block',
+    targetId: 'concept-pd-array',
     metadata: {
       description: 'Order blocks are prerequisite to PD array',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-prereq-liquidityvoid-displacement',
     type: 'CONCEPT_PREREQUISITE',
-    source: 'concept-liquidity-void',
-    target: 'concept-displacement',
+    sourceId: 'concept-liquidity-void',
+    targetId: 'concept-displacement',
     metadata: {
       description: 'Liquidity void understanding precedes displacement',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
 
   // ===== CONCEPT_RELATED_TO (30 edges - bidirectional) =====
   {
     id: 'rel-related-fvg-orderblock-1',
     type: 'CONCEPT_RELATED_TO',
-    source: 'concept-fvg',
-    target: 'concept-order-block',
+    sourceId: 'concept-fvg',
+    targetId: 'concept-order-block',
     metadata: {
       description: 'FVG and order blocks often occur together in price action',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-related-orderblock-fvg-2',
     type: 'CONCEPT_RELATED_TO',
-    source: 'concept-order-block',
-    target: 'concept-fvg',
+    sourceId: 'concept-order-block',
+    targetId: 'concept-fvg',
     metadata: {
       description: 'Order blocks and FVG are closely related concepts',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-related-bos-smsmss-1',
     type: 'CONCEPT_RELATED_TO',
-    source: 'concept-bos',
-    target: 'concept-sms-mss',
+    sourceId: 'concept-bos',
+    targetId: 'concept-sms-mss',
     metadata: {
       description: 'BOS and SMS/MSS are related market structure concepts',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-related-smsmss-bos-2',
     type: 'CONCEPT_RELATED_TO',
-    source: 'concept-sms-mss',
-    target: 'concept-bos',
+    sourceId: 'concept-sms-mss',
+    targetId: 'concept-bos',
     metadata: {
       description: 'SMS/MSS and BOS are complementary concepts',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-related-smsmss-choch-1',
     type: 'CONCEPT_RELATED_TO',
-    source: 'concept-sms-mss',
-    target: 'concept-choch',
+    sourceId: 'concept-sms-mss',
+    targetId: 'concept-choch',
     metadata: {
       description: 'SMS/MSS and CHOCH represent similar market shifts',
       createdAt: timestamp,
       updatedAt: timestamp
-    }
+    },
+    createdAt: timestamp
   },
   {
     id: 'rel-related-choch-smsmss-2',
     type: 'CONCEPT_RELATED_TO',
-    source: 'concept-choch',
-    target: 'concept-sms-mss',
+    sourceId: 'concept-choch',
+    targetId: 'concept-sms-mss',
     metadata: {
       description: 'CHOCH and SMS/MSS are interrelated concepts',
       createdAt: timestamp,

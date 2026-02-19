@@ -88,7 +88,7 @@ async function parseMarkdown(content: string, sourceRef: any): Promise<{ entitie
   const relationships: Relationship[] = [];
   const timestamp = new Date().toISOString();
 
-  const prompt = spark.llmPrompt`Analyze this ICT trading methodology Markdown document and extract structured entities.
+  const prompt = window.spark.llmPrompt`Analyze this ICT trading methodology Markdown document and extract structured entities.
 
 Document content:
 ${content}
@@ -119,7 +119,7 @@ Return a JSON object with this structure:
 
 Only extract information that is explicitly stated in the document. Do not invent or hallucinate data.`;
 
-  const response = await spark.llm(prompt, 'gpt-4o', true);
+  const response = await window.spark.llm(prompt, 'gpt-4o', true);
   const parsed = JSON.parse(response);
 
   if (parsed.concepts) {
