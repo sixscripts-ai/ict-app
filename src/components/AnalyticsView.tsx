@@ -3,8 +3,13 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter, ZAxis } from 'recharts';
-import { TrendUp, TrendDown, Target, Clock, CheckCircle, XCircle, ChartBar, Lightning, Calendar, Coins } from '@phosphor-icons/react';
+import { TrendUp, TrendDown, Target, Clock, CheckCircle, XCircle, ChartBar, Lightning, Calendar, Coins, FilePdf, Download, FileText, FileCsv } from '@phosphor-icons/react';
+import { toast } from 'sonner';
+import { PDFExportDialog } from '@/components/PDFExportDialog';
+import { exportTradesToCSV, exportAnalyticsToCSV, exportEntitiesToJSON } from '@/lib/csv-export';
 import type { Entity } from '@/lib/types';
 
 interface AnalyticsViewProps {
@@ -44,6 +49,7 @@ export function AnalyticsView({ entities }: AnalyticsViewProps) {
   const [timeFilter, setTimeFilter] = useState<'all' | '7d' | '30d' | '90d'>('all');
   const [pairFilter, setPairFilter] = useState<string>('all');
   const [setupFilter, setSetupFilter] = useState<string>('all');
+  const [showPDFDialog, setShowPDFDialog] = useState(false);
 
   const trades = useMemo(() => {
     return entities.filter(e => e.type === 'trade' && e.metadata?.execution);
@@ -298,6 +304,48 @@ export function AnalyticsView({ entities }: AnalyticsViewProps) {
       .sort((a, b) => parseInt(a.confluences) - parseInt(b.confluences));
   }, [filteredTrades]);
 
+  const handleExportTradesCSV = () => {
+    try {
+      exportTradesToCSV(filteredTrades, { includeMetadata: true });
+      toast.success('Trade data exported to CSV', {
+        description: 'Your trade history has been downloaded.'
+      });
+    } catch (error) {
+      console.error('CSV export error:', error);
+      toast.error('Failed to export trades', {
+        description: error instanceof Error ? error.message : 'No trades available'
+      });
+    }
+  };
+
+  const handleExportAnalyticsCSV = () => {
+    try {
+      exportAnalyticsToCSV(filteredTrades);
+      toast.success('Analytics exported to CSV', {
+        description: 'Performance statistics have been downloaded.'
+      });
+    } catch (error) {
+      console.error('CSV export error:', error);
+      toast.error('Failed to export analytics', {
+        description: error instanceof Error ? error.message : 'No data available'
+      });
+    }
+  };
+
+  const handleExportJSON = () => {
+    try {
+      exportEntitiesToJSON(filteredTrades);
+      toast.success('Data exported to JSON', {
+        description: 'Raw trade data has been downloaded.'
+      });
+    } catch (error) {
+      console.error('JSON export error:', error);
+      toast.error('Failed to export JSON', {
+        description: 'No data available'
+      });
+    }
+  };
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -344,6 +392,43 @@ export function AnalyticsView({ entities }: AnalyticsViewProps) {
               ))}
             </SelectContent>
           </Select>
+
+          <Button 
+            onClick={() => setShowPDFDialog(true)}
+            disabled={filteredTrades.length === 0}
+            className="gap-2"
+          >
+            <FilePdf size={18} />
+            Export PDF
+          </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button 
+                variant="outline" 
+                disabled={filteredTrades.length === 0}
+                className="gap-2"
+              >
+                <Download size={18} />
+                More Exports
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={handleExportTradesCSV}>
+                <FileCsv size={16} className="mr-2" />
+                Export Trades CSV
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={handleExportAnalyticsCSV}>
+                <FileCsv size={16} className="mr-2" />
+                Export Analytics CSV
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem onClick={handleExportJSON}>
+                <FileText size={16} className="mr-2" />
+                Export Raw JSON
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 
@@ -853,6 +938,12 @@ export function AnalyticsView({ entities }: AnalyticsViewProps) {
           </Card>
         </TabsContent>
       </Tabs>
+
+      <PDFExportDialog
+        open={showPDFDialog}
+        onOpenChange={setShowPDFDialog}
+        entities={filteredTrades}
+      />
     </div>
   );
 }
