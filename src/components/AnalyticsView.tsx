@@ -5,8 +5,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator } from '@/components/ui/dropdown-menu';
-import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar, ScatterChart, Scatter, ZAxis } from 'recharts';
-import { TrendUp, TrendDown, Target, Clock, CheckCircle, XCircle, ChartBar, Lightning, Calendar, Coins, FilePdf, Download, FileText, FileCsv } from '@phosphor-icons/react';
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, Area, AreaChart, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
+import { TrendUp, TrendDown, Target, Clock, ChartBar, Lightning, Coins, FilePdf, Download, FileText, FileCsv } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import { PDFExportDialog } from '@/components/PDFExportDialog';
 import { exportTradesToCSV, exportAnalyticsToCSV, exportEntitiesToJSON } from '@/lib/csv-export';

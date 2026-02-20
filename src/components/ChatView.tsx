@@ -228,7 +228,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const safeSessions = sessions || [];
+  const safeSessions = useMemo(() => sessions || [], [sessions]);
 
   // Migrate legacy chat-history into first session
   useEffect(() => {
@@ -245,7 +245,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
       setActiveSessionId(migrated.id);
       deleteLegacy();
     }
-  }, [legacyMessages, safeSessions.length]);
+  }, [legacyMessages, safeSessions.length, setSessions, setActiveSessionId, deleteLegacy]);
 
   // Auto-create a session if none exist
   useEffect(() => {
@@ -256,10 +256,10 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
     } else if (!activeSessionId || !safeSessions.find(s => s.id === activeSessionId)) {
       setActiveSessionId(safeSessions[0].id);
     }
-  }, [safeSessions.length, activeSessionId]);
+  }, [safeSessions, activeSessionId, setSessions, setActiveSessionId]);
 
   const activeSession = safeSessions.find(s => s.id === activeSessionId) || safeSessions[0];
-  const safeMessages = activeSession?.messages || [];
+  const safeMessages = useMemo(() => activeSession?.messages || [], [activeSession]);
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -280,7 +280,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
       const cur = current || [];
       return cur.map(s => s.id === activeSessionId ? updater(s) : s);
     });
-  }, [activeSessionId]);
+  }, [activeSessionId, setSessions]);
 
   const handleSubmit = async () => {
     if (!input.trim() || isLoading) return;

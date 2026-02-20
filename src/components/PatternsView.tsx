@@ -27,13 +27,7 @@ export function PatternsView({ entities, relationships, onEntitySelect }: Patter
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isGeneratingInsights, setIsGeneratingInsights] = useState(false);
 
-  useEffect(() => {
-    if (entities.length > 0 && relationships.length > 0) {
-      runAnalysis();
-    }
-  }, [entities.length, relationships.length]);
-
-  const runAnalysis = async () => {
+  const runAnalysis = useCallback(async () => {
     setIsAnalyzing(true);
     try {
       const [relationshipPatterns, conceptPatternsData] = await Promise.all([
@@ -47,7 +41,13 @@ export function PatternsView({ entities, relationships, onEntitySelect }: Patter
     } finally {
       setIsAnalyzing(false);
     }
-  };
+  }, [entities, relationships]);
+
+  useEffect(() => {
+    if (entities.length > 0 && relationships.length > 0) {
+      runAnalysis();
+    }
+  }, [entities, relationships, runAnalysis]);
 
   const generateInsights = async () => {
     if (patterns.length === 0 && conceptPatterns.length === 0) return;

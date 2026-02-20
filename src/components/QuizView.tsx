@@ -62,7 +62,7 @@ export function QuizView({ entities }: QuizViewProps) {
   const [currentIndex, setCurrentIndex] = useState(0);
   const [showAnswer, setShowAnswer] = useState(false);
 
-  const safeCards = cards || [];
+  const safeCards = useMemo(() => cards || [], [cards]);
 
   const dueCards = useMemo(() => {
     const now = new Date().toISOString();

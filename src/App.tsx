@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback, Suspense, lazy } from 'react';
 import { useKV } from '@/hooks/use-kv';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
@@ -7,18 +7,6 @@ import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, Magic
 import { DashboardView } from '@/components/DashboardView';
 import { ExplorerView } from '@/components/ExplorerView';
 import { UploadView } from '@/components/UploadView';
-import { ChatView } from '@/components/ChatView';
-import { GraphView } from '@/components/GraphView';
-import { PatternsView } from '@/components/PatternsView';
-import { TrainingView } from '@/components/TrainingView';
-import { SemanticSearchView } from '@/components/SemanticSearchView';
-import { RecommendationsView } from '@/components/RecommendationsView';
-import { SkillsView } from '@/components/SkillsView';
-import { AnalyticsView } from '@/components/AnalyticsView';
-import { KnowledgeGapView } from '@/components/KnowledgeGapView';
-import { QuizView } from '@/components/QuizView';
-import { ResearchView } from '@/components/ResearchView';
-import { KnowledgeBaseView } from '@/components/KnowledgeBaseView';
 import { EntityDetailDialog } from '@/components/EntityDetailDialog';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { CommandPalette } from '@/components/CommandPalette';
@@ -26,16 +14,42 @@ import { processFile } from '@/lib/ai-processor';
 import { generateDemoData } from '@/lib/demo-data';
 import { createAIGraphInternal } from '@/lib/schema';
 import { isLLMConfigured } from '@/lib/llm-client';
+import { Skeleton } from '@/components/ui/skeleton';
 import type { Entity, Relationship, Upload as UploadType, FileProcessingLog, DatabaseStats, DomainType, EntityType } from '@/lib/types';
+// import { ErrorFallback } from './ErrorFallback';
+
+// Lazy load heavy views
+const GraphView = lazy(() => import('@/components/GraphView').then(m => ({ default: m.GraphView })));
+const AnalyticsView = lazy(() => import('@/components/AnalyticsView').then(m => ({ default: m.AnalyticsView })));
+const ChatView = lazy(() => import('@/components/ChatView').then(m => ({ default: m.ChatView })));
+const PatternsView = lazy(() => import('@/components/PatternsView').then(m => ({ default: m.PatternsView })));
+const TrainingView = lazy(() => import('@/components/TrainingView').then(m => ({ default: m.TrainingView })));
+const SemanticSearchView = lazy(() => import('@/components/SemanticSearchView').then(m => ({ default: m.SemanticSearchView })));
+const RecommendationsView = lazy(() => import('@/components/RecommendationsView').then(m => ({ default: m.RecommendationsView })));
+const SkillsView = lazy(() => import('@/components/SkillsView').then(m => ({ default: m.SkillsView })));
+const KnowledgeGapView = lazy(() => import('@/components/KnowledgeGapView').then(m => ({ default: m.KnowledgeGapView })));
+const QuizView = lazy(() => import('@/components/QuizView').then(m => ({ default: m.QuizView })));
+const ResearchView = lazy(() => import('@/components/ResearchView').then(m => ({ default: m.ResearchView })));
+const KnowledgeBaseView = lazy(() => import('@/components/KnowledgeBaseView').then(m => ({ default: m.KnowledgeBaseView })));
+
+const LoadingFallback = () => (
+  <div className="h-full w-full flex items-center justify-center p-8 space-y-4 flex-col">
+    <Skeleton className="h-12 w-12 rounded-full" />
+    <div className="space-y-2">
+      <Skeleton className="h-4 w-[250px]" />
+      <Skeleton className="h-4 w-[200px]" />
+    </div>
+  </div>
+);
 
 function App() {
   const [entities, setEntities] = useKV<Entity[]>('ict-entities', []);
   const [relationships, setRelationships] = useKV<Relationship[]>('ict-relationships', []);
   const [uploads, setUploads] = useKV<UploadType[]>('ict-uploads', []);
-  const [logs, setLogs] = useKV<FileProcessingLog[]>('ict-logs', []);
-  const [chatMessages, setChatMessages] = useKV<import('@/lib/types').ChatMessage[]>('chat-history', []);
+  const [logs] = useKV<FileProcessingLog[]>('ict-logs', []);
+  const [chatMessages] = useKV<import('@/lib/types').ChatMessage[]>('chat-history', []);
   const [favorites, setFavorites] = useKV<string[]>('favorites', []);
-  
+
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
@@ -48,23 +62,23 @@ function App() {
   const aiGraphRef = useRef(createAIGraphInternal());
   const sessionIdRef = useRef(`session-${Date.now()}`);
 
-  const safeEntities = entities || [];
-  const safeRelationships = relationships || [];
-  const safeUploads = uploads || [];
-  const safeLogs = logs || [];
-  const safeChatMessages = chatMessages || [];
-  const safeFavorites = favorites || [];
+  const safeEntities = useMemo(() => entities || [], [entities]);
+  const safeRelationships = useMemo(() => relationships || [], [relationships]);
+  const safeUploads = useMemo(() => uploads || [], [uploads]);
+  const safeLogs = useMemo(() => logs || [], [logs]);
+  const safeChatMessages = useMemo(() => chatMessages || [], [chatMessages]);
+  const safeFavorites = useMemo(() => favorites || [], [favorites]);
 
   // Auto-load ICT knowledge base on first visit
   const [hasAutoLoaded, setHasAutoLoaded] = useKV<boolean>('auto-loaded-v2', false);
-  
+
   useEffect(() => {
     if (!hasAutoLoaded && safeEntities.length === 0) {
       const { entities: demoEntities, relationships: demoRelationships } = generateDemoData();
       setEntities(demoEntities);
       setRelationships(demoRelationships);
       setHasAutoLoaded(true);
-      
+
       const uploadId = `auto-load-${Date.now()}`;
       const upload: UploadType = {
         id: uploadId,
@@ -80,7 +94,7 @@ function App() {
       };
       setUploads((currentUploads) => [upload, ...(currentUploads || [])]);
     }
-  }, [hasAutoLoaded, safeEntities.length]);
+  }, [hasAutoLoaded, safeEntities.length, setEntities, setRelationships, setHasAutoLoaded, setUploads]);
 
   useEffect(() => {
     if (safeEntities.length > 0 || safeRelationships.length > 0) {
@@ -92,7 +106,7 @@ function App() {
     const intervalId = setInterval(() => {
       const cleared = aiGraphRef.current.clearExpiredSessions();
       if (cleared > 0) {
-        console.log(`Cleared ${cleared} expired AI session(s)`);
+        // Expired AI sessions cleared
       }
     }, 60 * 60 * 1000);
 
@@ -102,7 +116,7 @@ function App() {
   const handleFileUpload = async (files: FileList) => {
     const uploadId = `upload-${Date.now()}`;
     const fileArray = Array.from(files);
-    
+
     const upload: UploadType = {
       id: uploadId,
       type: 'file',
@@ -123,18 +137,18 @@ function App() {
 
     for (let i = 0; i < fileArray.length; i++) {
       const file = fileArray[i];
-      
+
       try {
         const result = await processFile(file, uploadId);
-        
+
         setLogs((currentLogs) => [result.log, ...(currentLogs || [])]);
-        
+
         allNewEntities.push(...result.entities);
         allNewRelationships.push(...result.relationships);
 
-        setUploads((currentUploads) => 
-          (currentUploads || []).map(u => 
-            u.id === uploadId 
+        setUploads((currentUploads) =>
+          (currentUploads || []).map(u =>
+            u.id === uploadId
               ? { ...u, processedCount: i + 1 }
               : u
           )
@@ -156,9 +170,9 @@ function App() {
     setEntities((currentEntities) => [...allNewEntities, ...(currentEntities || [])]);
     setRelationships((currentRelationships) => [...allNewRelationships, ...(currentRelationships || [])]);
 
-    setUploads((currentUploads) => 
-      (currentUploads || []).map(u => 
-        u.id === uploadId 
+    setUploads((currentUploads) =>
+      (currentUploads || []).map(u =>
+        u.id === uploadId
           ? { ...u, status: 'completed' as const, completedAt: new Date().toISOString() }
           : u
       )
@@ -193,7 +207,7 @@ function App() {
 
   const handleDemoLoad = () => {
     const { entities: demoEntities, relationships: demoRelationships } = generateDemoData();
-    
+
     setEntities((currentEntities) => [...demoEntities, ...(currentEntities || [])]);
     setRelationships((currentRelationships) => [...demoRelationships, ...(currentRelationships || [])]);
 
@@ -299,14 +313,14 @@ function App() {
     // Keep dialog in sync
     setSelectedEntity(prev => prev && prev.id === id ? { ...prev, ...updates, updatedAt: new Date().toISOString() } : prev);
     toast.success('Entity updated');
-  }, []);
+  }, [setEntities]);
 
   const handleToggleFavorite = useCallback((entityId: string) => {
     setFavorites((current) => {
       const cur = current || [];
       return cur.includes(entityId) ? cur.filter(id => id !== entityId) : [...cur, entityId];
     });
-  }, []);
+  }, [setFavorites]);
 
   const handleExportKnowledgeBase = useCallback(() => {
     const payload = {
@@ -381,8 +395,8 @@ function App() {
 
   const handleBatchReclassify = (entitiesToReclassify: Entity[], newDomain: DomainType, newType: EntityType) => {
     const entityIds = new Set(entitiesToReclassify.map(e => e.id));
-    
-    setEntities((currentEntities) => 
+
+    setEntities((currentEntities) =>
       (currentEntities || []).map(entity => {
         if (entityIds.has(entity.id)) {
           return {
@@ -403,13 +417,13 @@ function App() {
 
   const handleBatchDelete = (entitiesToDelete: Entity[]) => {
     const entityIds = new Set(entitiesToDelete.map(e => e.id));
-    
-    setEntities((currentEntities) => 
+
+    setEntities((currentEntities) =>
       (currentEntities || []).filter(entity => !entityIds.has(entity.id))
     );
 
     setRelationships((currentRelationships) =>
-      (currentRelationships || []).filter(rel => 
+      (currentRelationships || []).filter(rel =>
         !entityIds.has(rel.sourceId) && !entityIds.has(rel.targetId)
       )
     );
@@ -422,48 +436,65 @@ function App() {
   const handleAskQuestion = async (question: string): Promise<{ answer: string; sources: Entity[] }> => {
     const sessionId = sessionIdRef.current;
     const aiGraph = aiGraphRef.current;
-    
+
     aiGraph.createOrUpdateSession(sessionId, safeChatMessages, safeEntities);
     const session = aiGraph.getSession(sessionId);
-    
+
     if (session) {
-      const logicFlow = aiGraph.buildLogicFlow(question, session);
-      console.log('Logic Flow:', logicFlow);
+      aiGraph.buildLogicFlow(question, session);
     }
 
     const semanticResults = await aiGraph.semanticSearch(question, 20);
-    console.log('Semantic Search Results:', semanticResults.map(r => ({ name: r.node.name, similarity: r.similarity })));
+    const response = await aiGraph.query(question, session);
 
     const conceptEntities = semanticResults
       .filter(r => r.node.type === 'concept' && r.similarity > 0.5)
       .slice(0, 15)
       .map(r => safeEntities.find(e => e.id === r.node.id))
       .filter((e): e is Entity => e !== undefined);
-    
+
     const modelEntities = semanticResults
       .filter(r => r.node.type === 'model' && r.similarity > 0.5)
       .slice(0, 10)
       .map(r => safeEntities.find(e => e.id === r.node.id))
       .filter((e): e is Entity => e !== undefined);
-    
+
     const tradeEntities = semanticResults
       .filter(r => r.node.type === 'trade' && r.similarity > 0.5)
       .slice(0, 10)
       .map(r => safeEntities.find(e => e.id === r.node.id))
       .filter((e): e is Entity => e !== undefined);
-    
-    const enrichmentContext = Array.from({ length: Math.min(3, safeEntities.length) }, (_, i) => {
-      const entity = safeEntities[i];
-      if (entity.content && entity.type === 'document') {
+
+    // Get relevant document entities for context enrichment
+    const documentEntities = semanticResults
+      .filter(r => r.node.type === 'document' && r.similarity > 0.6)
+      .slice(0, 3)
+      .map(r => safeEntities.find(e => e.id === r.node.id))
+      .filter((e): e is Entity => e !== undefined && !!e.content);
+
+    const enrichmentContext = documentEntities.map(entity => {
+      if (entity.content) {
+        // Calculate enrichment synchronously based on content patterns
         const enrichment = aiGraph.enrichFromMarkdown(entity.name, entity.content);
         return {
-          concepts: enrichment.extractedConcepts,
+          concepts: enrichment.extractedConcepts.slice(0, 5),
           relationships: enrichment.extractedRelationships.length,
           complexity: enrichment.metadata.technicalComplexity
         };
       }
       return null;
     }).filter(Boolean);
+
+    // Filter relevant relationships connecting the identified entities
+    const relevantEntityIds = new Set([
+      ...conceptEntities.map(e => e.id),
+      ...modelEntities.map(e => e.id),
+      ...tradeEntities.map(e => e.id)
+    ]);
+    
+    const relevantRelationships = safeRelationships.filter(r => 
+      relevantEntityIds.has(r.sourceId) || relevantEntityIds.has(r.targetId)
+    ).slice(0, 30);
 
     const prompt = window.spark.llmPrompt`You are an ICT (Inner Circle Trader) methodology expert. Answer technical questions with precision and depth using semantic search results.
 
@@ -473,31 +504,31 @@ Semantically Relevant Knowledge (sorted by similarity):
 
 Most Relevant Concepts (similarity > 0.5):
 ${JSON.stringify(conceptEntities.map(e => ({
-  name: e.name,
-  description: e.description,
-  domain: e.domain
-})), null, 2)}
+      name: e.name,
+      description: e.description?.slice(0, 500),
+      domain: e.domain
+    })), null, 2)}
 
 Most Relevant Models:
 ${JSON.stringify(modelEntities.map(e => ({
-  name: e.name,
-  description: e.description,
-  domain: e.domain
-})), null, 2)}
+      name: e.name,
+      description: e.description?.slice(0, 500),
+      domain: e.domain
+    })), null, 2)}
 
 Most Relevant Trades:
 ${JSON.stringify(tradeEntities.map(e => ({
-  name: e.name,
-  description: e.description,
-  metadata: e.metadata
-})), null, 2)}
+      name: e.name,
+      description: e.description?.slice(0, 500),
+      metadata: e.metadata
+    })), null, 2)}
 
 Relevant Relationships:
-${JSON.stringify(safeRelationships.slice(0, 30).map(r => ({
-  type: r.type,
-  from: safeEntities.find(e => e.id === r.sourceId)?.name,
-  to: safeEntities.find(e => e.id === r.targetId)?.name
-})), null, 2)}
+${JSON.stringify(relevantRelationships.map(r => ({
+      type: r.type,
+      from: safeEntities.find(e => e.id === r.sourceId)?.name,
+      to: safeEntities.find(e => e.id === r.targetId)?.name
+    })), null, 2)}
 
 ${session ? `
 Session Context:
@@ -527,7 +558,7 @@ Instructions:
       .slice(0, 10)
       .map(r => safeEntities.find(e => e.id === r.node.id))
       .filter((e): e is Entity => e !== undefined)
-      .filter(e => 
+      .filter(e =>
         answer.toLowerCase().includes(e.name.toLowerCase()) ||
         (e.description && answer.toLowerCase().includes(e.description.toLowerCase().slice(0, 20)))
       )
@@ -662,7 +693,9 @@ Instructions:
           </TabsContent>
 
           <TabsContent value="knowledge">
-            <KnowledgeBaseView />
+            <Suspense fallback={<LoadingFallback />}>
+              <KnowledgeBaseView />
+            </Suspense>
           </TabsContent>
 
           <TabsContent value="explore">
@@ -682,8 +715,8 @@ Instructions:
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="explorer">
-                <ExplorerView 
-                  entities={safeEntities} 
+                <ExplorerView
+                  entities={safeEntities}
                   relationships={safeRelationships}
                   onEntitySelect={handleEntitySelect}
                   onBatchReclassify={handleBatchReclassify}
@@ -693,18 +726,22 @@ Instructions:
                 />
               </TabsContent>
               <TabsContent value="graph">
-                <GraphView 
-                  entities={safeEntities}
-                  relationships={safeRelationships}
-                  onEntitySelect={handleEntitySelect}
-                />
+                <Suspense fallback={<LoadingFallback />}>
+                  <GraphView
+                    entities={safeEntities}
+                    relationships={safeRelationships}
+                    onEntitySelect={handleEntitySelect}
+                  />
+                </Suspense>
               </TabsContent>
               <TabsContent value="search">
-                <SemanticSearchView
-                  entities={safeEntities}
-                  aiGraph={aiGraphRef.current}
-                  onEntitySelect={handleEntitySelect}
-                />
+                <Suspense fallback={<LoadingFallback />}>
+                  <SemanticSearchView
+                    entities={safeEntities}
+                    aiGraph={aiGraphRef.current}
+                    onEntitySelect={handleEntitySelect}
+                  />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -742,47 +779,61 @@ Instructions:
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="analytics">
-                <AnalyticsView entities={safeEntities} />
+                <Suspense fallback={<LoadingFallback />}>
+                  <AnalyticsView entities={safeEntities} />
+                </Suspense>
               </TabsContent>
               <TabsContent value="training">
-                <TrainingView
-                  entities={safeEntities}
-                  relationships={safeRelationships}
-                  onEntitySelect={handleEntitySelect}
-                />
+                <Suspense fallback={<LoadingFallback />}>
+                  <TrainingView
+                    entities={safeEntities}
+                    relationships={safeRelationships}
+                    onEntitySelect={handleEntitySelect}
+                  />
+                </Suspense>
               </TabsContent>
               <TabsContent value="patterns">
-                <PatternsView
-                  entities={safeEntities}
-                  relationships={safeRelationships}
-                  onEntitySelect={handleEntitySelect}
-                />
+                <Suspense fallback={<LoadingFallback />}>
+                  <PatternsView
+                    entities={safeEntities}
+                    relationships={safeRelationships}
+                    onEntitySelect={handleEntitySelect}
+                  />
+                </Suspense>
               </TabsContent>
               <TabsContent value="recommendations">
-                <RecommendationsView
-                  entities={safeEntities}
-                  relationships={safeRelationships}
-                  aiGraph={aiGraphRef.current}
-                  onEntitySelect={handleEntitySelect}
-                />
+                <Suspense fallback={<LoadingFallback />}>
+                  <RecommendationsView
+                    entities={safeEntities}
+                    relationships={safeRelationships}
+                    aiGraph={aiGraphRef.current}
+                    onEntitySelect={handleEntitySelect}
+                  />
+                </Suspense>
               </TabsContent>
               <TabsContent value="skills">
-                <SkillsView
-                  entities={safeEntities}
-                  relationships={safeRelationships}
-                  aiGraph={aiGraphRef.current}
-                  onEntitySelect={handleEntitySelect}
-                />
+                <Suspense fallback={<LoadingFallback />}>
+                  <SkillsView
+                    entities={safeEntities}
+                    relationships={safeRelationships}
+                    aiGraph={aiGraphRef.current}
+                    onEntitySelect={handleEntitySelect}
+                  />
+                </Suspense>
               </TabsContent>
               <TabsContent value="gaps">
-                <KnowledgeGapView
-                  entities={safeEntities}
-                  relationships={safeRelationships}
-                  onEntitySelect={handleEntitySelect}
-                />
+                <Suspense fallback={<LoadingFallback />}>
+                  <KnowledgeGapView
+                    entities={safeEntities}
+                    relationships={safeRelationships}
+                    onEntitySelect={handleEntitySelect}
+                  />
+                </Suspense>
               </TabsContent>
               <TabsContent value="quiz">
-                <QuizView entities={safeEntities} />
+                <Suspense fallback={<LoadingFallback />}>
+                  <QuizView entities={safeEntities} />
+                </Suspense>
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -800,7 +851,9 @@ Instructions:
                 </TabsTrigger>
               </TabsList>
               <TabsContent value="research">
-                <ResearchView />
+                <Suspense fallback={<LoadingFallback />}>
+                  <ResearchView />
+                </Suspense>
               </TabsContent>
               <TabsContent value="upload">
                 <UploadView
@@ -815,10 +868,12 @@ Instructions:
           </TabsContent>
 
           <TabsContent value="chat">
-            <ChatView
-              entities={safeEntities}
-              onAskQuestion={handleAskQuestion}
-            />
+            <Suspense fallback={<LoadingFallback />}>
+              <ChatView
+                entities={safeEntities}
+                onAskQuestion={handleAskQuestion}
+              />
+            </Suspense>
           </TabsContent>
         </Tabs>
       </main>
@@ -833,9 +888,9 @@ Instructions:
               <span>Built by <a href="https://github.com/sixscriptssoftware" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">SixScripts Software</a></span>
             </div>
             <div className="flex items-center gap-4">
-              <a 
+              <a
                 href="https://notebooklm.google.com/notebook/0c01de2c-bd21-4331-9caa-367bfa77a992"
-                target="_blank" 
+                target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 hover:text-primary transition-colors"
               >
@@ -843,9 +898,9 @@ Instructions:
                 NotebookLM Research
                 <ArrowSquareOut size={12} />
               </a>
-              <a 
+              <a
                 href="https://github.com/sixscripts-ai/ict-app"
-                target="_blank" 
+                target="_blank"
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 hover:text-primary transition-colors"
               >

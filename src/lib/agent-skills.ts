@@ -156,7 +156,7 @@ export class AgentSkillRegistry {
     }
 
     const results: SkillResult[] = [];
-    let currentParams = { ...initialParams };
+    const currentParams = { ...initialParams };
 
     for (let i = 0; i < chain.skills.length; i++) {
       const skillId = chain.skills[i];
@@ -960,7 +960,7 @@ function createTradeStatisticsSkill(): AgentSkill {
       const totalGrade = trades.reduce((sum, t) => sum + (t.metadata?.grade || 0), 0);
       const avgGrade = trades.length > 0 ? totalGrade / trades.length : 0;
 
-      let groupedStats: Record<string, any> = {};
+      const groupedStats: Record<string, any> = {};
 
       if (params.groupBy === 'session') {
         const sessions = new Set(trades.map(t => t.metadata?.session || t.metadata?.killzone).filter(Boolean));

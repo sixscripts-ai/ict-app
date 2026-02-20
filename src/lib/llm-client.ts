@@ -197,20 +197,9 @@ export function isLLMConfigured(): boolean {
   return !!getProviderApiKey(provider);
 }
 
-// ---------------------------------------------------------------------------
-// Legacy shim (backward compat — used by App.tsx spark references)
-// ---------------------------------------------------------------------------
-export function getApiKey(): string | null { return getProviderApiKey(getActiveProvider()); }
-export function setApiKey(key: string): void { setProviderApiKey(getActiveProvider(), key); }
-export function removeApiKey(): void { removeProviderApiKey(getActiveProvider()); }
-export function getBaseUrl(): string {
-  const p = getActiveProvider();
-  if (p === 'ollama') return getOllamaUrl();
-  return PROVIDERS[p].defaultBaseUrl;
-}
-export function setBaseUrl(url: string): void {
-  if (getActiveProvider() === 'ollama') setOllamaUrl(url);
-}
+// Legacy shim functions removed (unused)
+// getApiKey, setApiKey, removeApiKey, getBaseUrl, setBaseUrl
+
 
 // ---------------------------------------------------------------------------
 // llmPrompt — tagged template literal helper

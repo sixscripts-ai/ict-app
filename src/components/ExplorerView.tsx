@@ -1,4 +1,5 @@
 import { useState, useMemo, useRef, useCallback } from 'react';
+import { EmptyState } from '@/components/shared/EmptyState';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
@@ -429,10 +430,11 @@ export function ExplorerView({ entities, relationships = [], onEntitySelect, onB
         className="h-[calc(100vh-320px)] overflow-auto"
       >
         {Object.keys(groupedByDomain).length === 0 ? (
-          <Card className="p-12 text-center bg-card/50">
-            <MagnifyingGlass size={48} className="mx-auto mb-4 text-muted-foreground" />
-            <p className="text-muted-foreground">No entities found</p>
-          </Card>
+          <EmptyState
+            icon={<MagnifyingGlass size={48} />}
+            message="No entities found"
+            description="Try adjusting your filters or search query."
+          />
         ) : (
           <div
             style={{
