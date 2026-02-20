@@ -129,11 +129,9 @@ export function validateCausalChain(
   
   if (!valid && chainName === 'reversal_sequence') {
     const firstMissing = missing[0];
-    const reversalChain = chain as typeof ICT_CAUSAL_CHAINS.reversal_sequence;
-    failure_message = reversalChain.failure_at_step?.[firstMissing as keyof typeof reversalChain.failure_at_step];
+    failure_message = ICT_CAUSAL_CHAINS.reversal_sequence.failure_at_step[firstMissing as keyof typeof ICT_CAUSAL_CHAINS.reversal_sequence.failure_at_step];
   } else if (!valid && chainName === 'htf_to_ltf') {
-    const htfChain = chain as typeof ICT_CAUSAL_CHAINS.htf_to_ltf;
-    failure_message = htfChain.failure_mode;
+    failure_message = ICT_CAUSAL_CHAINS.htf_to_ltf.failure_mode;
   }
   
   return { valid, missing_steps: missing, failure_message };

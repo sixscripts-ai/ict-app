@@ -54,7 +54,7 @@ const entityLabels: Record<EntityType, string> = {
 export function GraphView({ entities, relationships, onEntitySelect }: GraphViewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
-  const animationFrameRef = useRef<number>();
+  const animationFrameRef = useRef<number | undefined>(undefined);
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null);
   
   const [selectedTypes, setSelectedTypes] = useState<EntityType[]>([]);

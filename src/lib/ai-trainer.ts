@@ -705,7 +705,7 @@ function extractCommonConditions(trades: Entity[]): string[] {
       return acc;
     }, {} as Record<string, number>);
     
-    const dominantSession = Object.entries(sessionCounts)
+    const dominantSession = (Object.entries(sessionCounts) as [string, number][])
       .sort((a, b) => b[1] - a[1])[0];
     
     if (dominantSession && dominantSession[0] && dominantSession[1] >= trades.length * 0.6) {
@@ -723,7 +723,7 @@ function extractCommonConditions(trades: Entity[]): string[] {
       return acc;
     }, {} as Record<string, number>);
     
-    const dominantPair = Object.entries(pairCounts)
+    const dominantPair = (Object.entries(pairCounts) as [string, number][])
       .sort((a, b) => b[1] - a[1])[0];
     
     if (dominantPair && dominantPair[0] && dominantPair[1] >= trades.length * 0.5) {
