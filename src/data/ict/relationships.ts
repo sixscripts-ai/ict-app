@@ -5694,5 +5694,119 @@ export const ICT_RELATIONSHIPS: Relationship[] = [
       description: 'Broker trade 58 executed during killzone',
       updatedAt: timestamp
     }
+  },
+
+  // ===== ORPHAN FIX: concept-nmog =====
+  {
+    id: 'rel-557',
+    type: 'CONCEPT_RELATED_TO',
+    sourceId: 'concept-nmog',
+    targetId: 'concept-nwog',
+    createdAt: timestamp,
+    metadata: {
+      description: 'New Month Opening Gap is a higher-timeframe variant of the same opening-gap principle as NWOG',
+      updatedAt: timestamp
+    }
+  },
+  {
+    id: 'rel-558',
+    type: 'CONCEPT_RELATED_TO',
+    sourceId: 'concept-nmog',
+    targetId: 'concept-ndog',
+    createdAt: timestamp,
+    metadata: {
+      description: 'NMOG and NDOG are both opening gaps across different timeframes',
+      updatedAt: timestamp
+    }
+  },
+  {
+    id: 'rel-559',
+    type: 'CONCEPT_RELATED_TO',
+    sourceId: 'concept-nmog',
+    targetId: 'concept-opening-gap',
+    createdAt: timestamp,
+    metadata: {
+      description: 'NMOG is a monthly-timeframe opening gap',
+      updatedAt: timestamp
+    }
+  },
+  {
+    id: 'rel-560',
+    type: 'CONCEPT_RELATED_TO',
+    sourceId: 'concept-nmog',
+    targetId: 'concept-monthly-profile',
+    createdAt: timestamp,
+    metadata: {
+      description: 'NMOG serves as a key reference point within the monthly profile',
+      updatedAt: timestamp
+    }
+  },
+  {
+    id: 'rel-561',
+    type: 'CONCEPT_PREREQUISITE',
+    sourceId: 'concept-equilibrium',
+    targetId: 'concept-nmog',
+    createdAt: timestamp,
+    metadata: {
+      description: 'Understanding equilibrium is prerequisite to using NMOG as a balance reference',
+      updatedAt: timestamp
+    }
+  },
+
+  // ===== ORPHAN FIX: concept-risk-on-risk-off =====
+  {
+    id: 'rel-562',
+    type: 'CONCEPT_RELATED_TO',
+    sourceId: 'concept-risk-on-risk-off',
+    targetId: 'concept-intermarket-analysis',
+    createdAt: timestamp,
+    metadata: {
+      description: 'Risk-on/risk-off is a core intermarket analysis framework',
+      updatedAt: timestamp
+    }
+  },
+  {
+    id: 'rel-563',
+    type: 'CONCEPT_RELATED_TO',
+    sourceId: 'concept-risk-on-risk-off',
+    targetId: 'concept-dxy-correlation',
+    createdAt: timestamp,
+    metadata: {
+      description: 'DXY correlation shifts based on risk-on vs risk-off regime',
+      updatedAt: timestamp
+    }
+  },
+  {
+    id: 'rel-564',
+    type: 'CONCEPT_RELATED_TO',
+    sourceId: 'concept-risk-on-risk-off',
+    targetId: 'concept-bond-yield-correlation',
+    createdAt: timestamp,
+    metadata: {
+      description: 'Bond yields are primary signals for risk-on/risk-off regime identification',
+      updatedAt: timestamp
+    }
+  },
+  {
+    id: 'rel-565',
+    type: 'CONCEPT_RELATED_TO',
+    sourceId: 'concept-risk-on-risk-off',
+    targetId: 'concept-institutional-sponsorship',
+    createdAt: timestamp,
+    metadata: {
+      description: 'Institutional sponsorship flows reflect the prevailing risk sentiment regime',
+      updatedAt: timestamp
+    }
+  },
+  {
+    id: 'rel-566',
+    type: 'CONCEPT_PREREQUISITE',
+    sourceId: 'concept-risk-on-risk-off',
+    targetId: 'concept-narrative',
+    createdAt: timestamp,
+    metadata: {
+      description: 'Risk-on/risk-off regime informs the broader trading narrative',
+      updatedAt: timestamp
+    }
   }
 ];
