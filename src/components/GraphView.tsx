@@ -3,9 +3,10 @@ import * as d3 from 'd3';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowsClockwise, MagnifyingGlassMinus, MagnifyingGlassPlus, Target, Path, Play, Pause, Keyboard } from '@phosphor-icons/react';
+import { ArrowsClockwise, MagnifyingGlassMinus, MagnifyingGlassPlus, Target, Path, Play, Pause, Keyboard, MagnifyingGlass, X } from '@phosphor-icons/react';
 import type { Entity, Relationship, EntityType, RelationshipType } from '@/lib/types';
 
 interface GraphViewProps {
@@ -67,6 +68,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
   const [isStable, setIsStable] = useState(false);
   const [keyboardSelectedNodeIndex, setKeyboardSelectedNodeIndex] = useState<number>(-1);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [graphSearch, setGraphSearch] = useState('');
 
   const getChainEntitiesAndRelationships = useCallback(() => {
     const conceptIds = new Set(entities.filter(e => e.type === 'concept').map(e => e.id));
@@ -537,6 +539,25 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
     };
   }, [filteredEntities, filteredRelationships, onEntitySelect, focusedNode, animateFlow, isStable, keyboardSelectedNodeIndex]);
 
+  // Graph search: mutate node/label opacity without rebuilding simulation
+  useEffect(() => {
+    if (!svgRef.current) return;
+    const svg = d3.select(svgRef.current);
+    const q = graphSearch.trim().toLowerCase();
+    if (!q) {
+      svg.selectAll<SVGGElement, GraphNode>('g g')
+        .style('opacity', null);
+      svg.selectAll<SVGTextElement, GraphNode>('text.node-label')
+        .style('opacity', null);
+      return;
+    }
+    svg.selectAll<SVGGElement, GraphNode>('g g').each(function(d) {
+      if (!d) return;
+      const match = d.name.toLowerCase().includes(q);
+      d3.select(this).style('opacity', match ? '1' : '0.1');
+    });
+  }, [graphSearch]);
+
   const handleReset = () => {
     if (!svgRef.current || !zoomBehaviorRef.current) return;
     const svg = d3.select(svgRef.current);
@@ -778,6 +799,33 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-12rem)]">
+      {/* Search bar */}
+      <div className="flex items-center gap-2">
+        <div className="relative flex-1 max-w-xs">
+          <MagnifyingGlass size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground pointer-events-none" />
+          <Input
+            value={graphSearch}
+            onChange={e => setGraphSearch(e.target.value)}
+            placeholder="Filter nodes by name…"
+            className="pl-8 pr-8 h-8 text-xs"
+          />
+          {graphSearch && (
+            <button
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground transition-colors"
+              onClick={() => setGraphSearch('')}
+            >
+              <X size={13} />
+            </button>
+          )}
+        </div>
+        {graphSearch && (
+          <span className="text-xs text-muted-foreground">
+            {filteredEntities.filter(e => e.name.toLowerCase().includes(graphSearch.trim().toLowerCase())).length} match
+            {filteredEntities.filter(e => e.name.toLowerCase().includes(graphSearch.trim().toLowerCase())).length !== 1 ? 'es' : ''}
+          </span>
+        )}
+      </div>
+
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-2 flex-wrap">
           {uniqueTypes.map(type => (

@@ -3,7 +3,7 @@ import { useKV } from '@/hooks/use-kv';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, MagicWand, Lightning, ChartLine, BookOpenText, BookOpen, GithubLogo, ArrowSquareOut, GearSix, Warning, Flask, MagnifyingGlass } from '@phosphor-icons/react';
+import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, MagicWand, Lightning, ChartLine, BookOpenText, BookOpen, GithubLogo, ArrowSquareOut, GearSix, Warning, Flask, MagnifyingGlass, DownloadSimple } from '@phosphor-icons/react';
 import { DashboardView } from '@/components/DashboardView';
 import { ExplorerView } from '@/components/ExplorerView';
 import { UploadView } from '@/components/UploadView';
@@ -19,6 +19,7 @@ import { ResearchView } from '@/components/ResearchView';
 import { KnowledgeBaseView } from '@/components/KnowledgeBaseView';
 import { EntityDetailDialog } from '@/components/EntityDetailDialog';
 import { SettingsDialog } from '@/components/SettingsDialog';
+import { CommandPalette } from '@/components/CommandPalette';
 import { processFile } from '@/lib/ai-processor';
 import { generateDemoData } from '@/lib/demo-data';
 import { createAIGraphInternal } from '@/lib/schema';
@@ -36,6 +37,7 @@ function App() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [cmdPaletteOpen, setCmdPaletteOpen] = useState(false);
   const [exploreTab, setExploreTab] = useState('explorer');
   const [analyticsTab, setAnalyticsTab] = useState('analytics');
   const [researchTab, setResearchTab] = useState('research');
@@ -284,6 +286,45 @@ function App() {
     setDetailDialogOpen(true);
   }, []);
 
+  const handleEntityUpdate = useCallback((id: string, updates: Partial<Pick<Entity, 'name' | 'description' | 'tags'>>) => {
+    setEntities((current) =>
+      (current || []).map(e =>
+        e.id === id ? { ...e, ...updates, updatedAt: new Date().toISOString() } : e
+      )
+    );
+    // Keep dialog in sync
+    setSelectedEntity(prev => prev && prev.id === id ? { ...prev, ...updates, updatedAt: new Date().toISOString() } : prev);
+    toast.success('Entity updated');
+  }, []);
+
+  const handleExportKnowledgeBase = useCallback(() => {
+    const payload = {
+      exportedAt: new Date().toISOString(),
+      entities: safeEntities,
+      relationships: safeRelationships,
+    };
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `ict-knowledge-base-${new Date().toISOString().slice(0, 10)}.json`;
+    a.click();
+    URL.revokeObjectURL(url);
+    toast.success('Knowledge base exported', { description: `${safeEntities.length} entities · ${safeRelationships.length} relationships` });
+  }, [safeEntities, safeRelationships]);
+
+  // Global Cmd+K / Ctrl+K listener
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+        e.preventDefault();
+        setCmdPaletteOpen(open => !open);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
   const handleNavigate = useCallback((tab: string) => {
     switch (tab) {
       case 'graph':
@@ -512,6 +553,24 @@ Instructions:
                   <span className="px-2 py-1 rounded-md bg-accent/10 text-accent font-medium">{safeRelationships.length} relationships</span>
                 </div>
               )}
+              <button
+                onClick={() => setCmdPaletteOpen(true)}
+                className="hidden md:flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs text-muted-foreground hover:text-foreground bg-secondary/40 hover:bg-secondary/70 border border-border/50 transition-colors"
+                title="Command Palette (⌘K)"
+              >
+                <MagnifyingGlass size={14} />
+                <span>Search…</span>
+                <kbd className="ml-1 px-1.5 py-0.5 bg-secondary/70 rounded font-mono text-[10px]">⌘K</kbd>
+              </button>
+              {safeEntities.length > 0 && (
+                <button
+                  onClick={handleExportKnowledgeBase}
+                  className="p-2 rounded-lg hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground"
+                  title="Export knowledge base as JSON"
+                >
+                  <DownloadSimple size={20} weight="duotone" />
+                </button>
+              )}
               <a
                 href="https://github.com/sixscripts-ai/ict-app"
                 target="_blank"
@@ -580,7 +639,7 @@ Instructions:
           </div>
 
           <TabsContent value="dashboard">
-            <DashboardView stats={stats} onNavigate={handleNavigate} />
+            <DashboardView stats={stats} onNavigate={handleNavigate} entities={safeEntities} relationships={safeRelationships} />
           </TabsContent>
 
           <TabsContent value="knowledge">
@@ -766,9 +825,20 @@ Instructions:
         open={detailDialogOpen}
         onOpenChange={setDetailDialogOpen}
         onEntityClick={handleEntitySelect}
+        onEntityUpdate={handleEntityUpdate}
       />
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
+
+      <CommandPalette
+        open={cmdPaletteOpen}
+        onClose={() => setCmdPaletteOpen(false)}
+        entities={safeEntities}
+        onEntitySelect={(entity) => { handleEntitySelect(entity); setCmdPaletteOpen(false); }}
+        onNavigate={(tab) => { handleNavigate(tab); setCmdPaletteOpen(false); }}
+        onOpenSettings={() => { setSettingsOpen(true); setCmdPaletteOpen(false); }}
+        onExport={handleExportKnowledgeBase}
+      />
 
       <Toaster position="top-right" />
     </div>

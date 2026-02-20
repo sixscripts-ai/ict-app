@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Copy, Check } from '@phosphor-icons/react';
+import { Copy, Check, PencilSimple, X, FloppyDisk, Tag, Plus } from '@phosphor-icons/react';
 import { getEntityTypeIcon } from '@/lib/ai-processor';
 import type { Entity, Relationship } from '@/lib/types';
 
@@ -16,6 +17,7 @@ interface EntityDetailDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onEntityClick: (entity: Entity) => void;
+  onEntityUpdate?: (id: string, updates: Partial<Pick<Entity, 'name' | 'description' | 'tags'>>) => void;
 }
 
 export function EntityDetailDialog({ 
@@ -24,15 +26,63 @@ export function EntityDetailDialog({
   allEntities,
   open, 
   onOpenChange,
-  onEntityClick 
+  onEntityClick,
+  onEntityUpdate
 }: EntityDetailDialogProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [draftName, setDraftName] = useState('');
+  const [draftDescription, setDraftDescription] = useState('');
+  const [draftTags, setDraftTags] = useState<string[]>([]);
+  const [newTag, setNewTag] = useState('');
+
+  // Reset edit state whenever the entity changes or dialog closes
+  useEffect(() => {
+    setIsEditing(false);
+    setNewTag('');
+    if (entity) {
+      setDraftName(entity.name);
+      setDraftDescription(entity.description || '');
+      setDraftTags(entity.tags ? [...entity.tags] : []);
+    }
+  }, [entity, open]);
 
   const copyToClipboard = (text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopiedKey(key);
       setTimeout(() => setCopiedKey(null), 2000);
     });
+  };
+
+  const handleSave = () => {
+    if (!entity || !onEntityUpdate) return;
+    onEntityUpdate(entity.id, {
+      name: draftName.trim() || entity.name,
+      description: draftDescription,
+      tags: draftTags,
+    });
+    setIsEditing(false);
+  };
+
+  const handleCancel = () => {
+    if (!entity) return;
+    setDraftName(entity.name);
+    setDraftDescription(entity.description || '');
+    setDraftTags(entity.tags ? [...entity.tags] : []);
+    setNewTag('');
+    setIsEditing(false);
+  };
+
+  const handleAddTag = () => {
+    const t = newTag.trim();
+    if (t && !draftTags.includes(t)) {
+      setDraftTags(prev => [...prev, t]);
+    }
+    setNewTag('');
+  };
+
+  const handleRemoveTag = (tag: string) => {
+    setDraftTags(prev => prev.filter(t => t !== tag));
   };
 
   if (!entity) return null;
@@ -52,11 +102,21 @@ export function EntityDetailDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-4xl max-h-[90vh] overflow-hidden flex flex-col">
         <DialogHeader>
-          <div className="flex items-center gap-3">
-            <span className="text-3xl">{getEntityTypeIcon(entity.type)}</span>
-            <div className="flex-1">
-              <DialogTitle className="text-2xl">{entity.name}</DialogTitle>
-              <div className="flex gap-2 mt-2">
+          <div className="flex items-start gap-3">
+            <span className="text-3xl mt-1">{getEntityTypeIcon(entity.type)}</span>
+            <div className="flex-1 min-w-0">
+              {isEditing ? (
+                <Input
+                  value={draftName}
+                  onChange={e => setDraftName(e.target.value)}
+                  className="text-xl font-semibold h-9 mb-2"
+                  autoFocus
+                  onKeyDown={e => { if (e.key === 'Enter') handleSave(); if (e.key === 'Escape') handleCancel(); }}
+                />
+              ) : (
+                <DialogTitle className="text-2xl">{entity.name}</DialogTitle>
+              )}
+              <div className="flex items-center gap-2 mt-2 flex-wrap">
                 <Badge>{entity.type}</Badge>
                 <Badge variant="secondary">{entity.domain}</Badge>
                 {entity.validationStatus === 'valid' && (
@@ -64,6 +124,24 @@ export function EntityDetailDialog({
                 )}
                 {entity.validationStatus === 'invalid' && (
                   <Badge variant="destructive">INVALID</Badge>
+                )}
+                {onEntityUpdate && (
+                  <div className="ml-auto flex items-center gap-1.5">
+                    {isEditing ? (
+                      <>
+                        <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs text-muted-foreground" onClick={handleCancel}>
+                          <X size={13} /> Cancel
+                        </Button>
+                        <Button size="sm" className="h-7 gap-1.5 text-xs" onClick={handleSave}>
+                          <FloppyDisk size={13} /> Save
+                        </Button>
+                      </>
+                    ) : (
+                      <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs text-muted-foreground hover:text-foreground" onClick={() => setIsEditing(true)}>
+                        <PencilSimple size={13} /> Edit
+                      </Button>
+                    )}
+                  </div>
                 )}
               </div>
             </div>
@@ -81,23 +159,66 @@ export function EntityDetailDialog({
           <ScrollArea className="flex-1 mt-4">
             <TabsContent value="overview" className="mt-0">
               <div className="space-y-4">
-                {entity.description && (
-                  <div>
-                    <h4 className="font-semibold mb-2">Description</h4>
-                    <p className="text-sm text-muted-foreground">{entity.description}</p>
-                  </div>
-                )}
+                <div>
+                  <h4 className="font-semibold mb-2">Description</h4>
+                  {isEditing ? (
+                    <textarea
+                      value={draftDescription}
+                      onChange={e => setDraftDescription(e.target.value)}
+                      rows={4}
+                      className="w-full text-sm rounded-md border border-input bg-background px-3 py-2 ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring resize-none"
+                      placeholder="Add a description…"
+                    />
+                  ) : (
+                    entity.description
+                      ? <p className="text-sm text-muted-foreground">{entity.description}</p>
+                      : <p className="text-sm text-muted-foreground/50 italic">No description</p>
+                  )}
+                </div>
 
-                {entity.tags && entity.tags.length > 0 && (
-                  <div>
-                    <h4 className="font-semibold mb-2">Tags</h4>
-                    <div className="flex flex-wrap gap-2">
-                      {entity.tags.map(tag => (
-                        <Badge key={tag} variant="secondary">{tag}</Badge>
-                      ))}
+                <div>
+                  <h4 className="font-semibold mb-2">Tags</h4>
+                  {isEditing ? (
+                    <div className="space-y-2">
+                      <div className="flex flex-wrap gap-2">
+                        {draftTags.map(tag => (
+                          <Badge key={tag} variant="secondary" className="gap-1 pr-1">
+                            {tag}
+                            <button
+                              className="ml-1 rounded-full hover:bg-muted-foreground/20 p-0.5 transition-colors"
+                              onClick={() => handleRemoveTag(tag)}
+                            >
+                              <X size={10} />
+                            </button>
+                          </Badge>
+                        ))}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Tag size={14} className="text-muted-foreground" />
+                        <Input
+                          value={newTag}
+                          onChange={e => setNewTag(e.target.value)}
+                          placeholder="Add tag…"
+                          className="h-7 text-xs flex-1"
+                          onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleAddTag(); } }}
+                        />
+                        <Button size="sm" variant="ghost" className="h-7 px-2" onClick={handleAddTag}>
+                          <Plus size={13} />
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                )}
+                  ) : (
+                    (entity.tags && entity.tags.length > 0) ? (
+                      <div className="flex flex-wrap gap-2">
+                        {entity.tags.map(tag => (
+                          <Badge key={tag} variant="secondary">{tag}</Badge>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-sm text-muted-foreground/50 italic">No tags</p>
+                    )
+                  )}
+                </div>
 
                 {entity.sources && entity.sources.length > 0 && (
                   <div>

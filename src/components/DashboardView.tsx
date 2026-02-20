@@ -2,15 +2,17 @@ import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Database, BookOpen, Target, TrendUp, Cube, Code, Notebook, CirclesThreePlus, Graph, ChatsCircle, Brain, Lightning, Sparkle, ArrowRight, ChartLine, BookOpenText } from '@phosphor-icons/react';
-import type { DatabaseStats, DomainType, EntityType } from '@/lib/types';
+import { Database, BookOpen, Target, TrendUp, Cube, Code, Notebook, CirclesThreePlus, Graph, ChatsCircle, Brain, Lightning, Sparkle, ArrowRight, ChartLine, BookOpenText, Heart, Warning, Crown } from '@phosphor-icons/react';
+import type { DatabaseStats, DomainType, EntityType, Entity, Relationship } from '@/lib/types';
 
 interface DashboardViewProps {
   stats: DatabaseStats;
   onNavigate?: (tab: string) => void;
+  entities?: Entity[];
+  relationships?: Relationship[];
 }
 
-export function DashboardView({ stats, onNavigate }: DashboardViewProps) {
+export function DashboardView({ stats, onNavigate, entities = [], relationships = [] }: DashboardViewProps) {
   const domainIcons: Record<DomainType, React.ReactNode> = {
     concepts: <BookOpen size={24} weight="duotone" />,
     models: <Target size={24} weight="duotone" />,
@@ -182,6 +184,107 @@ export function DashboardView({ stats, onNavigate }: DashboardViewProps) {
           })}
         </div>
       </Card>
+
+      {/* Knowledge Health */}
+      {entities.length > 0 && (() => {
+        const relCountById: Record<string, number> = {};
+        relationships.forEach(r => {
+          relCountById[r.sourceId] = (relCountById[r.sourceId] || 0) + 1;
+          relCountById[r.targetId] = (relCountById[r.targetId] || 0) + 1;
+        });
+        const orphanCount = entities.filter(e => !(relCountById[e.id])).length;
+        const avgRels = entities.length > 0 ? (relationships.length * 2) / entities.length : 0;
+        const topConnected = [...entities]
+          .sort((a, b) => (relCountById[b.id] || 0) - (relCountById[a.id] || 0))
+          .slice(0, 3);
+        const typeDistribution = Object.entries(
+          entities.reduce((acc, e) => { acc[e.type] = (acc[e.type] || 0) + 1; return acc; }, {} as Record<string, number>)
+        ).sort((a, b) => b[1] - a[1]).slice(0, 5);
+        const maxCount = typeDistribution[0]?.[1] || 1;
+        const healthScore = Math.min(100, Math.round(
+          (Math.min(avgRels / 4, 1) * 50) +
+          (Math.max(0, 1 - orphanCount / Math.max(entities.length, 1)) * 50)
+        ));
+        const healthColor = healthScore >= 70 ? 'text-green-400' : healthScore >= 40 ? 'text-yellow-400' : 'text-red-400';
+        const healthLabel = healthScore >= 70 ? 'Healthy' : healthScore >= 40 ? 'Fair' : 'Sparse';
+
+        return (
+          <Card className="p-6 bg-card/50 backdrop-blur border-border/50">
+            <div className="flex items-center justify-between mb-5">
+              <div className="flex items-center gap-2">
+                <Heart size={18} className="text-rose-400" weight="duotone" />
+                <h2 className="text-lg font-semibold">Knowledge Health</h2>
+              </div>
+              <div className={`flex items-center gap-1.5 text-sm font-semibold ${healthColor}`}>
+                <span className="text-2xl font-bold">{healthScore}</span>
+                <div className="flex flex-col leading-none">
+                  <span className="text-[10px] text-muted-foreground font-normal">/ 100</span>
+                  <span className="text-xs">{healthLabel}</span>
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              {/* Stats column */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Avg relationships / entity</span>
+                  <span className="font-semibold tabular-nums">{avgRels.toFixed(1)}</span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground flex items-center gap-1">
+                    <Warning size={13} className="text-yellow-400" /> Orphan entities
+                  </span>
+                  <span className={`font-semibold tabular-nums ${orphanCount > 0 ? 'text-yellow-400' : 'text-green-400'}`}>
+                    {orphanCount}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-muted-foreground">Total relationships</span>
+                  <span className="font-semibold tabular-nums">{relationships.length}</span>
+                </div>
+              </div>
+
+              {/* Type distribution */}
+              <div className="space-y-2">
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2">Type Distribution</p>
+                {typeDistribution.map(([type, count]) => (
+                  <div key={type} className="space-y-0.5">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="text-foreground/80 capitalize">{type.replace('_', ' ')}</span>
+                      <span className="text-muted-foreground tabular-nums">{count}</span>
+                    </div>
+                    <div className="h-1.5 rounded-full bg-secondary/40 overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-primary/60 transition-all"
+                        style={{ width: `${(count / maxCount) * 100}%` }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Top connected */}
+              <div>
+                <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-1">
+                  <Crown size={12} className="text-yellow-400" /> Most Connected
+                </p>
+                <div className="space-y-2">
+                  {topConnected.map((entity, i) => (
+                    <div key={entity.id} className="flex items-center gap-2 text-sm">
+                      <span className="text-muted-foreground/60 font-mono text-xs w-4">{i + 1}.</span>
+                      <span className="flex-1 truncate text-foreground/90">{entity.name}</span>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 flex-shrink-0">
+                        {relCountById[entity.id] || 0}
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </Card>
+        );
+      })()}
 
       {/* Recent Activity */}
       <Card className="p-6 bg-card/50 backdrop-blur border-border/50">
