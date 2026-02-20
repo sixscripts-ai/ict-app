@@ -284,6 +284,41 @@ function App() {
     setDetailDialogOpen(true);
   }, []);
 
+  const handleNavigate = useCallback((tab: string) => {
+    switch (tab) {
+      case 'graph':
+        setActiveTab('explore');
+        setExploreTab('graph');
+        break;
+      case 'search':
+        setActiveTab('explore');
+        setExploreTab('search');
+        break;
+      case 'explorer':
+        setActiveTab('explore');
+        setExploreTab('explorer');
+        break;
+      case 'patterns':
+        setActiveTab('analytics');
+        setAnalyticsTab('patterns');
+        break;
+      case 'training':
+        setActiveTab('analytics');
+        setAnalyticsTab('training');
+        break;
+      case 'recommendations':
+        setActiveTab('analytics');
+        setAnalyticsTab('recommendations');
+        break;
+      case 'skills':
+        setActiveTab('analytics');
+        setAnalyticsTab('skills');
+        break;
+      default:
+        setActiveTab(tab);
+    }
+  }, []);
+
   const handleBatchReclassify = (entitiesToReclassify: Entity[], newDomain: DomainType, newType: EntityType) => {
     const entityIds = new Set(entitiesToReclassify.map(e => e.id));
     
@@ -545,7 +580,7 @@ Instructions:
           </div>
 
           <TabsContent value="dashboard">
-            <DashboardView stats={stats} onNavigate={setActiveTab} />
+            <DashboardView stats={stats} onNavigate={handleNavigate} />
           </TabsContent>
 
           <TabsContent value="knowledge">

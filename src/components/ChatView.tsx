@@ -223,6 +223,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('concepts');
   const scrollRef = useRef<HTMLDivElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   const safeMessages = messages || [];
 
@@ -231,6 +232,14 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
   }, [safeMessages]);
+
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (el) {
+      el.style.height = 'auto';
+      el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+    }
+  }, [input]);
 
   const handleSubmit = async () => {
     if (!input.trim() || isLoading) return;
@@ -606,6 +615,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
       <div className="space-y-2">
         <div className="flex gap-2">
           <textarea
+            ref={textareaRef}
             placeholder="Ask about ICT concepts, filter trades, analyze patterns..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
@@ -618,13 +628,6 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
             disabled={isLoading}
             rows={1}
             className="flex-1 min-h-[40px] max-h-[120px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-            style={{ height: 'auto', minHeight: '40px' }}
-            ref={(el) => {
-              if (el) {
-                el.style.height = 'auto';
-                el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-              }
-            }}
           />
           <Button onClick={handleSubmit} disabled={!input.trim() || isLoading} className="gap-2">
             <PaperPlaneRight size={16} weight="bold" />

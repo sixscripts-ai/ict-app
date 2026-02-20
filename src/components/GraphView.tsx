@@ -56,6 +56,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
   const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null);
+  const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   
   const [selectedTypes, setSelectedTypes] = useState<EntityType[]>([]);
   const [zoom, setZoom] = useState(1);
@@ -222,6 +223,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       });
 
     svg.call(zoomBehavior);
+    zoomBehaviorRef.current = zoomBehavior;
 
     const defs = g.append('defs');
     
@@ -536,37 +538,28 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
   }, [filteredEntities, filteredRelationships, onEntitySelect, focusedNode, animateFlow, isStable, keyboardSelectedNodeIndex]);
 
   const handleReset = () => {
-    if (!svgRef.current) return;
+    if (!svgRef.current || !zoomBehaviorRef.current) return;
     const svg = d3.select(svgRef.current);
     svg.transition()
       .duration(750)
-      .call(
-        d3.zoom<SVGSVGElement, unknown>().transform as any,
-        d3.zoomIdentity
-      );
+      .call(zoomBehaviorRef.current.transform, d3.zoomIdentity);
     setZoom(1);
   };
 
   const handleZoomIn = () => {
-    if (!svgRef.current) return;
+    if (!svgRef.current || !zoomBehaviorRef.current) return;
     const svg = d3.select(svgRef.current);
     svg.transition()
       .duration(300)
-      .call(
-        d3.zoom<SVGSVGElement, unknown>().scaleBy as any,
-        1.3
-      );
+      .call(zoomBehaviorRef.current.scaleBy, 1.3);
   };
 
   const handleZoomOut = () => {
-    if (!svgRef.current) return;
+    if (!svgRef.current || !zoomBehaviorRef.current) return;
     const svg = d3.select(svgRef.current);
     svg.transition()
       .duration(300)
-      .call(
-        d3.zoom<SVGSVGElement, unknown>().scaleBy as any,
-        0.7
-      );
+      .call(zoomBehaviorRef.current.scaleBy, 0.7);
   };
 
   const handleTypeFilter = (type: EntityType) => {
@@ -768,7 +761,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
   }, [filteredEntities, keyboardSelectedNodeIndex, focusedNode, showKeyboardHelp, showChainOnly, animateFlow, uniqueTypes]);
 
   const centerOnNode = (node: GraphNode) => {
-    if (!svgRef.current || !node.x || !node.y) return;
+    if (!svgRef.current || !node.x || !node.y || !zoomBehaviorRef.current) return;
     
     const svg = d3.select(svgRef.current);
     const width = svgRef.current.clientWidth;
@@ -780,10 +773,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
     
     svg.transition()
       .duration(500)
-      .call(
-        d3.zoom<SVGSVGElement, unknown>().transform as any,
-        d3.zoomIdentity.translate(x, y).scale(scale)
-      );
+      .call(zoomBehaviorRef.current.transform, d3.zoomIdentity.translate(x, y).scale(scale));
   };
 
   return (

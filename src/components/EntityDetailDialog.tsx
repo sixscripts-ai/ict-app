@@ -1,8 +1,11 @@
+import { useState } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
+import { Copy, Check } from '@phosphor-icons/react';
 import { getEntityTypeIcon } from '@/lib/ai-processor';
 import type { Entity, Relationship } from '@/lib/types';
 
@@ -23,6 +26,15 @@ export function EntityDetailDialog({
   onOpenChange,
   onEntityClick 
 }: EntityDetailDialogProps) {
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
+
+  const copyToClipboard = (text: string, key: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedKey(key);
+      setTimeout(() => setCopiedKey(null), 2000);
+    });
+  };
+
   if (!entity) return null;
 
   const relatedEntities = relationships
@@ -229,7 +241,18 @@ export function EntityDetailDialog({
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
                     <p className="text-muted-foreground">ID</p>
-                    <p className="font-mono text-xs mt-1">{entity.id}</p>
+                    <div className="flex items-center gap-2 mt-1">
+                      <p className="font-mono text-xs truncate">{entity.id}</p>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-5 w-5 flex-shrink-0"
+                        onClick={() => copyToClipboard(entity.id, 'id')}
+                        title="Copy ID"
+                      >
+                        {copiedKey === 'id' ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                      </Button>
+                    </div>
                   </div>
                   <div>
                     <p className="text-muted-foreground">Type</p>
@@ -253,7 +276,18 @@ export function EntityDetailDialog({
                   <>
                     <Separator />
                     <div>
-                      <h4 className="font-semibold mb-2">Additional Metadata</h4>
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold">Additional Metadata</h4>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-7 gap-1.5 text-xs"
+                          onClick={() => copyToClipboard(JSON.stringify(entity.metadata, null, 2), 'metadata')}
+                        >
+                          {copiedKey === 'metadata' ? <Check size={12} className="text-green-400" /> : <Copy size={12} />}
+                          {copiedKey === 'metadata' ? 'Copied!' : 'Copy JSON'}
+                        </Button>
+                      </div>
                       <pre className="text-xs font-mono p-3 rounded-lg bg-secondary/30 overflow-x-auto">
                         {JSON.stringify(entity.metadata, null, 2)}
                       </pre>
