@@ -3,6 +3,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Database, BookOpen, Target, TrendUp, Cube, Code, Notebook, CirclesThreePlus, Graph, ChatsCircle, Brain, Lightning, Sparkle, ArrowRight, ChartLine, BookOpenText, Heart, Warning, Crown, Star } from '@phosphor-icons/react';
+import { StatCard } from '@/components/shared/StatCard';
 import type { DatabaseStats, DomainType, EntityType, Entity, Relationship } from '@/lib/types';
 
 interface DashboardViewProps {
@@ -89,53 +90,30 @@ export function DashboardView({ stats, onNavigate, entities = [], relationships 
 
       {/* Stats Row */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <Card className="p-5 bg-card/50 backdrop-blur border-border/50 hover:border-primary/50 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-primary/10">
-              <Database size={22} className="text-primary" weight="duotone" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Entities</p>
-              <p className="text-2xl font-semibold">{stats.totalEntities.toLocaleString()}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-5 bg-card/50 backdrop-blur border-border/50 hover:border-accent/50 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-accent/10">
-              <CirclesThreePlus size={22} className="text-accent" weight="duotone" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Relationships</p>
-              <p className="text-2xl font-semibold">{stats.totalRelationships.toLocaleString()}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-5 bg-card/50 backdrop-blur border-border/50 hover:border-primary/50 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-yellow-500/10">
-              <Lightning size={22} className="text-yellow-400" weight="duotone" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Entity Types</p>
-              <p className="text-2xl font-semibold">{Object.keys(stats.entitiesByType).filter(k => (stats.entitiesByType as Record<string, number>)[k] > 0).length}</p>
-            </div>
-          </div>
-        </Card>
-
-        <Card className="p-5 bg-card/50 backdrop-blur border-border/50 hover:border-primary/50 transition-colors">
-          <div className="flex items-center gap-3">
-            <div className="p-2.5 rounded-lg bg-purple-500/10">
-              <Brain size={22} className="text-purple-400" weight="duotone" />
-            </div>
-            <div>
-              <p className="text-xs text-muted-foreground uppercase tracking-wider font-medium">Domains</p>
-              <p className="text-2xl font-semibold">{Object.keys(stats.entitiesByDomain).filter(k => (stats.entitiesByDomain as Record<string, number>)[k] > 0).length}</p>
-            </div>
-          </div>
-        </Card>
+        <StatCard
+          label="Entities"
+          value={stats.totalEntities.toLocaleString()}
+          icon={<Database size={22} weight="duotone" className="text-primary" />}
+        />
+        <StatCard
+          label="Relationships"
+          value={stats.totalRelationships.toLocaleString()}
+          icon={<CirclesThreePlus size={22} weight="duotone" className="text-accent" />}
+          iconContainerClassName="bg-accent/10"
+          className="hover:border-accent/50"
+        />
+        <StatCard
+          label="Entity Types"
+          value={Object.keys(stats.entitiesByType).filter(k => (stats.entitiesByType as Record<string, number>)[k] > 0).length}
+          icon={<Lightning size={22} weight="duotone" className="text-yellow-400" />}
+          iconContainerClassName="bg-yellow-500/10"
+        />
+        <StatCard
+          label="Domains"
+          value={Object.keys(stats.entitiesByDomain).filter(k => (stats.entitiesByDomain as Record<string, number>)[k] > 0).length}
+          icon={<Brain size={22} weight="duotone" className="text-purple-400" />}
+          iconContainerClassName="bg-purple-500/10"
+        />
       </div>
 
       {/* Quick Actions */}

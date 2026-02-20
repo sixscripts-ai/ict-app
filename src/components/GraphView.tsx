@@ -138,17 +138,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
     return { filteredEntities: fEntities, filteredRelationships: fRelationships };
   }, [entities, relationships, selectedTypes, showChainOnly, getChainEntitiesAndRelationships]);
 
-  const getConnectedNodeIds = (nodeId: string): Set<string> => {
-    const connected = new Set<string>();
-    connected.add(nodeId);
-    filteredRelationships.forEach(rel => {
-      if (rel.sourceId === nodeId) connected.add(rel.targetId);
-      if (rel.targetId === nodeId) connected.add(rel.sourceId);
-    });
-    return connected;
-  };
-
-  const getPathNodes = (startNodeId: string, maxDepth: number = 3): Set<string> => {
+  const getPathNodes = useCallback((startNodeId: string, maxDepth: number = 3): Set<string> => {
     const visited = new Set<string>();
     const queue: Array<{id: string; depth: number}> = [{id: startNodeId, depth: 0}];
     
@@ -169,9 +159,9 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
     }
     
     return visited;
-  };
+  }, [filteredRelationships]);
 
-  const getPathEdges = (nodeIds: Set<string>): Set<string> => {
+  const getPathEdges = useCallback((nodeIds: Set<string>): Set<string> => {
     const pathEdges = new Set<string>();
     filteredRelationships.forEach(rel => {
       if (nodeIds.has(rel.sourceId) && nodeIds.has(rel.targetId)) {
@@ -179,7 +169,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       }
     });
     return pathEdges;
-  };
+  }, [filteredRelationships]);
 
   useEffect(() => {
     if (!svgRef.current || filteredEntities.length === 0) return;
@@ -537,7 +527,17 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         cancelAnimationFrame(animationFrameRef.current);
       }
     };
-  }, [filteredEntities, filteredRelationships, onEntitySelect, focusedNode, animateFlow, isStable, keyboardSelectedNodeIndex]);
+  }, [
+    filteredEntities, 
+    filteredRelationships, 
+    onEntitySelect, 
+    focusedNode, 
+    animateFlow, 
+    isStable, 
+    keyboardSelectedNodeIndex,
+    getPathNodes,
+    getPathEdges
+  ]);
 
   // Graph search: mutate node/label opacity without rebuilding simulation
   useEffect(() => {
@@ -591,7 +591,21 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
     );
   };
 
-  const uniqueTypes = Array.from(new Set(entities.map(e => e.type)));
+  const centerOnNode = useCallback((node: GraphNode) => {
+    if (!svgRef.current || !node.x || !node.y || !zoomBehaviorRef.current) return;
+    
+    const svg = d3.select(svgRef.current);
+    const width = svgRef.current.clientWidth;
+    const height = svgRef.current.clientHeight;
+    
+    const scale = zoom;
+    const x = -node.x * scale + width / 2;
+    const y = -node.y * scale + height / 2;
+    
+    svg.transition()
+      .duration(500)
+      .call(zoomBehaviorRef.current.transform, d3.zoomIdentity.translate(x, y).scale(scale));
+  }, [zoom]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -779,23 +793,9 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [filteredEntities, keyboardSelectedNodeIndex, focusedNode, showKeyboardHelp, showChainOnly, animateFlow, uniqueTypes]);
+  }, [filteredEntities, keyboardSelectedNodeIndex, focusedNode, showKeyboardHelp, showChainOnly, animateFlow, uniqueTypes, centerOnNode, showKeyboardHelp]);
 
-  const centerOnNode = (node: GraphNode) => {
-    if (!svgRef.current || !node.x || !node.y || !zoomBehaviorRef.current) return;
-    
-    const svg = d3.select(svgRef.current);
-    const width = svgRef.current.clientWidth;
-    const height = svgRef.current.clientHeight;
-    
-    const scale = zoom;
-    const x = -node.x * scale + width / 2;
-    const y = -node.y * scale + height / 2;
-    
-    svg.transition()
-      .duration(500)
-      .call(zoomBehaviorRef.current.transform, d3.zoomIdentity.translate(x, y).scale(scale));
-  };
+  // centerOnNode moved up
 
   return (
     <div className="flex flex-col gap-4 h-[calc(100vh-12rem)]">

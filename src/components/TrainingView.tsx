@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useKV } from '@/hooks/use-kv';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
