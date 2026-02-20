@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -74,7 +74,7 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
     return null;
   };
 
-  const filtered = entities.filter(entity => {
+  const filtered = useMemo(() => entities.filter(entity => {
     const matchesSearch = entity.name.toLowerCase().includes(search.toLowerCase()) ||
                          entity.description?.toLowerCase().includes(search.toLowerCase());
     const matchesDomain = filterDomain === 'all' || entity.domain === filterDomain;
@@ -96,13 +96,13 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
     }
     
     return true;
-  });
+  }), [entities, search, filterDomain, filterType, showAdvancedFilters, minRiskReward, maxRiskReward, minQualityGrade, filterTradeResult]);
 
-  const groupedByDomain = filtered.reduce((acc, entity) => {
+  const groupedByDomain = useMemo(() => filtered.reduce((acc, entity) => {
     if (!acc[entity.domain]) acc[entity.domain] = [];
     acc[entity.domain].push(entity);
     return acc;
-  }, {} as Record<DomainType, Entity[]>);
+  }, {} as Record<DomainType, Entity[]>), [filtered]);
 
   const resetAdvancedFilters = () => {
     setMinRiskReward([0]);

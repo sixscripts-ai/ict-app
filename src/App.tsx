@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useKV } from '@/hooks/use-kv';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, Sparkle, MagicWand, Lightning, ChartLine, BookOpenText, GithubLogo, ArrowSquareOut, GearSix, Warning } from '@phosphor-icons/react';
+import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, MagicWand, Lightning, ChartLine, BookOpenText, BookOpen, GithubLogo, ArrowSquareOut, GearSix, Warning, Flask, MagnifyingGlass } from '@phosphor-icons/react';
 import { DashboardView } from '@/components/DashboardView';
 import { ExplorerView } from '@/components/ExplorerView';
 import { UploadView } from '@/components/UploadView';
@@ -16,6 +16,7 @@ import { RecommendationsView } from '@/components/RecommendationsView';
 import { SkillsView } from '@/components/SkillsView';
 import { AnalyticsView } from '@/components/AnalyticsView';
 import { ResearchView } from '@/components/ResearchView';
+import { KnowledgeBaseView } from '@/components/KnowledgeBaseView';
 import { EntityDetailDialog } from '@/components/EntityDetailDialog';
 import { SettingsDialog } from '@/components/SettingsDialog';
 import { processFile } from '@/lib/ai-processor';
@@ -35,6 +36,9 @@ function App() {
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [exploreTab, setExploreTab] = useState('explorer');
+  const [analyticsTab, setAnalyticsTab] = useState('analytics');
+  const [researchTab, setResearchTab] = useState('research');
 
   const aiGraphRef = useRef(createAIGraphInternal());
   const sessionIdRef = useRef(`session-${Date.now()}`);
@@ -275,10 +279,10 @@ function App() {
     setActiveTab('dashboard');
   };
 
-  const handleEntitySelect = (entity: Entity) => {
+  const handleEntitySelect = useCallback((entity: Entity) => {
     setSelectedEntity(entity);
     setDetailDialogOpen(true);
-  };
+  }, []);
 
   const handleBatchReclassify = (entitiesToReclassify: Entity[], newDomain: DomainType, newType: EntityType) => {
     const entityIds = new Set(entitiesToReclassify.map(e => e.id));
@@ -437,7 +441,7 @@ Instructions:
     return { answer, sources: relevantSources };
   };
 
-  const stats: DatabaseStats = {
+  const stats: DatabaseStats = useMemo(() => ({
     totalEntities: safeEntities.length,
     totalRelationships: safeRelationships.length,
     totalUploads: safeUploads.length,
@@ -450,7 +454,7 @@ Instructions:
       return acc;
     }, {} as Record<DomainType, number>),
     recentActivity: safeLogs.slice(0, 10)
-  };
+  }), [safeEntities, safeRelationships, safeUploads, safeLogs]);
 
   return (
     <div className="min-h-screen bg-background text-foreground flex flex-col">
@@ -517,45 +521,21 @@ Instructions:
                 <Database size={16} />
                 Dashboard
               </TabsTrigger>
-              <TabsTrigger value="explorer" className="gap-2">
-                <Tree size={16} />
-                Explorer
+              <TabsTrigger value="knowledge" className="gap-2">
+                <BookOpen size={16} />
+                Knowledge Base
               </TabsTrigger>
-              <TabsTrigger value="search" className="gap-2">
-                <Sparkle size={16} />
-                Search
-              </TabsTrigger>
-              <TabsTrigger value="graph" className="gap-2">
+              <TabsTrigger value="explore" className="gap-2">
                 <Graph size={16} />
-                Graph
-              </TabsTrigger>
-              <TabsTrigger value="patterns" className="gap-2">
-                <Brain size={16} />
-                Patterns
-              </TabsTrigger>
-              <TabsTrigger value="training" className="gap-2">
-                <GraduationCap size={16} />
-                Training
-              </TabsTrigger>
-              <TabsTrigger value="recommendations" className="gap-2">
-                <MagicWand size={16} />
-                Recommendations
-              </TabsTrigger>
-              <TabsTrigger value="skills" className="gap-2">
-                <Lightning size={16} />
-                Skills
+                Explore
               </TabsTrigger>
               <TabsTrigger value="analytics" className="gap-2">
                 <ChartLine size={16} />
                 Analytics
               </TabsTrigger>
               <TabsTrigger value="research" className="gap-2">
-                <BookOpenText size={16} />
+                <Flask size={16} />
                 Research
-              </TabsTrigger>
-              <TabsTrigger value="upload" className="gap-2">
-                <Upload size={16} />
-                Upload
               </TabsTrigger>
               <TabsTrigger value="chat" className="gap-2">
                 <ChatsCircle size={16} />
@@ -568,83 +548,136 @@ Instructions:
             <DashboardView stats={stats} onNavigate={setActiveTab} />
           </TabsContent>
 
-          <TabsContent value="explorer">
-            <ExplorerView 
-              entities={safeEntities} 
-              onEntitySelect={handleEntitySelect}
-              onBatchReclassify={handleBatchReclassify}
-              onBatchDelete={handleBatchDelete}
-            />
+          <TabsContent value="knowledge">
+            <KnowledgeBaseView />
           </TabsContent>
 
-          <TabsContent value="search">
-            <SemanticSearchView
-              entities={safeEntities}
-              aiGraph={aiGraphRef.current}
-              onEntitySelect={handleEntitySelect}
-            />
-          </TabsContent>
-
-          <TabsContent value="graph">
-            <GraphView 
-              entities={safeEntities}
-              relationships={safeRelationships}
-              onEntitySelect={handleEntitySelect}
-            />
-          </TabsContent>
-
-          <TabsContent value="patterns">
-            <PatternsView
-              entities={safeEntities}
-              relationships={safeRelationships}
-              onEntitySelect={handleEntitySelect}
-            />
-          </TabsContent>
-
-          <TabsContent value="training">
-            <TrainingView
-              entities={safeEntities}
-              relationships={safeRelationships}
-              onEntitySelect={handleEntitySelect}
-            />
-          </TabsContent>
-
-          <TabsContent value="recommendations">
-            <RecommendationsView
-              entities={safeEntities}
-              relationships={safeRelationships}
-              aiGraph={aiGraphRef.current}
-              onEntitySelect={handleEntitySelect}
-            />
-          </TabsContent>
-
-          <TabsContent value="skills">
-            <SkillsView
-              entities={safeEntities}
-              relationships={safeRelationships}
-              aiGraph={aiGraphRef.current}
-              onEntitySelect={handleEntitySelect}
-            />
+          <TabsContent value="explore">
+            <Tabs value={exploreTab} onValueChange={setExploreTab}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="explorer" className="gap-2">
+                  <Tree size={14} />
+                  Explorer
+                </TabsTrigger>
+                <TabsTrigger value="graph" className="gap-2">
+                  <Graph size={14} />
+                  Graph
+                </TabsTrigger>
+                <TabsTrigger value="search" className="gap-2">
+                  <MagnifyingGlass size={14} />
+                  Search
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="explorer">
+                <ExplorerView 
+                  entities={safeEntities} 
+                  onEntitySelect={handleEntitySelect}
+                  onBatchReclassify={handleBatchReclassify}
+                  onBatchDelete={handleBatchDelete}
+                />
+              </TabsContent>
+              <TabsContent value="graph">
+                <GraphView 
+                  entities={safeEntities}
+                  relationships={safeRelationships}
+                  onEntitySelect={handleEntitySelect}
+                />
+              </TabsContent>
+              <TabsContent value="search">
+                <SemanticSearchView
+                  entities={safeEntities}
+                  aiGraph={aiGraphRef.current}
+                  onEntitySelect={handleEntitySelect}
+                />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="analytics">
-            <AnalyticsView
-              entities={safeEntities}
-            />
+            <Tabs value={analyticsTab} onValueChange={setAnalyticsTab}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="analytics" className="gap-2">
+                  <ChartLine size={14} />
+                  Analytics
+                </TabsTrigger>
+                <TabsTrigger value="training" className="gap-2">
+                  <GraduationCap size={14} />
+                  Training
+                </TabsTrigger>
+                <TabsTrigger value="patterns" className="gap-2">
+                  <Brain size={14} />
+                  Patterns
+                </TabsTrigger>
+                <TabsTrigger value="recommendations" className="gap-2">
+                  <MagicWand size={14} />
+                  Recs
+                </TabsTrigger>
+                <TabsTrigger value="skills" className="gap-2">
+                  <Lightning size={14} />
+                  Skills
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="analytics">
+                <AnalyticsView entities={safeEntities} />
+              </TabsContent>
+              <TabsContent value="training">
+                <TrainingView
+                  entities={safeEntities}
+                  relationships={safeRelationships}
+                  onEntitySelect={handleEntitySelect}
+                />
+              </TabsContent>
+              <TabsContent value="patterns">
+                <PatternsView
+                  entities={safeEntities}
+                  relationships={safeRelationships}
+                  onEntitySelect={handleEntitySelect}
+                />
+              </TabsContent>
+              <TabsContent value="recommendations">
+                <RecommendationsView
+                  entities={safeEntities}
+                  relationships={safeRelationships}
+                  aiGraph={aiGraphRef.current}
+                  onEntitySelect={handleEntitySelect}
+                />
+              </TabsContent>
+              <TabsContent value="skills">
+                <SkillsView
+                  entities={safeEntities}
+                  relationships={safeRelationships}
+                  aiGraph={aiGraphRef.current}
+                  onEntitySelect={handleEntitySelect}
+                />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="research">
-            <ResearchView />
-          </TabsContent>
-
-          <TabsContent value="upload">
-            <UploadView
-              uploads={safeUploads}
-              logs={safeLogs}
-              onFileUpload={handleFileUpload}
-              onRepoUpload={handleRepoUpload}
-              onDemoLoad={handleDemoLoad}
-            />
+            <Tabs value={researchTab} onValueChange={setResearchTab}>
+              <TabsList className="mb-4">
+                <TabsTrigger value="research" className="gap-2">
+                  <BookOpenText size={14} />
+                  Research
+                </TabsTrigger>
+                <TabsTrigger value="upload" className="gap-2">
+                  <Upload size={14} />
+                  Upload
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="research">
+                <ResearchView />
+              </TabsContent>
+              <TabsContent value="upload">
+                <UploadView
+                  uploads={safeUploads}
+                  logs={safeLogs}
+                  onFileUpload={handleFileUpload}
+                  onRepoUpload={handleRepoUpload}
+                  onDemoLoad={handleDemoLoad}
+                />
+              </TabsContent>
+            </Tabs>
           </TabsContent>
 
           <TabsContent value="chat">

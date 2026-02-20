@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
 import * as d3 from 'd3';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -67,7 +67,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
   const [keyboardSelectedNodeIndex, setKeyboardSelectedNodeIndex] = useState<number>(-1);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
 
-  const getChainEntitiesAndRelationships = () => {
+  const getChainEntitiesAndRelationships = useCallback(() => {
     const conceptIds = new Set(entities.filter(e => e.type === 'concept').map(e => e.id));
     const modelIds = new Set(entities.filter(e => e.type === 'model').map(e => e.id));
     const tradeIds = new Set(entities.filter(e => e.type === 'trade').map(e => e.id));
@@ -114,22 +114,26 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
     );
 
     return { chainEntities, chainRelationships };
-  };
+  }, [entities, relationships]);
 
-  let filteredEntities = selectedTypes.length > 0
-    ? entities.filter(e => selectedTypes.includes(e.type))
-    : entities;
+  const { filteredEntities, filteredRelationships } = useMemo(() => {
+    let fEntities = selectedTypes.length > 0
+      ? entities.filter(e => selectedTypes.includes(e.type))
+      : entities;
 
-  let filteredRelationships = relationships.filter(r => 
-    filteredEntities.some(e => e.id === r.sourceId) &&
-    filteredEntities.some(e => e.id === r.targetId)
-  );
+    let fRelationships = relationships.filter(r => 
+      fEntities.some(e => e.id === r.sourceId) &&
+      fEntities.some(e => e.id === r.targetId)
+    );
 
-  if (showChainOnly) {
-    const { chainEntities, chainRelationships } = getChainEntitiesAndRelationships();
-    filteredEntities = chainEntities;
-    filteredRelationships = chainRelationships;
-  }
+    if (showChainOnly) {
+      const { chainEntities, chainRelationships } = getChainEntitiesAndRelationships();
+      fEntities = chainEntities;
+      fRelationships = chainRelationships;
+    }
+
+    return { filteredEntities: fEntities, filteredRelationships: fRelationships };
+  }, [entities, relationships, selectedTypes, showChainOnly, getChainEntitiesAndRelationships]);
 
   const getConnectedNodeIds = (nodeId: string): Set<string> => {
     const connected = new Set<string>();

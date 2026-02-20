@@ -50,7 +50,7 @@ export function RecommendationsView({ entities, relationships, aiGraph, onEntity
     if (tradeEntities.length > 0) {
       generatePatternInsights();
     }
-  }, [entities]);
+  }, [tradeEntities.length]);
 
   const generateRecommendations = async (trade: Entity) => {
     setLoading(true);
