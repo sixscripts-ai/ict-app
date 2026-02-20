@@ -1,29 +1,31 @@
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef, useCallback } from 'react';
 import { Card } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
-import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
-import { MagnifyingGlass, Funnel, CheckSquare, Square } from '@phosphor-icons/react';
+import { MagnifyingGlass, Funnel, CheckSquare, Square, Star } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { getEntityTypeIcon } from '@/lib/ai-processor';
 import { BatchOperationsBar } from '@/components/BatchOperationsBar';
 import { exportEntities } from '@/lib/export-utils';
 import { toast } from 'sonner';
-import type { Entity, DomainType, EntityType } from '@/lib/types';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import type { Entity, DomainType, EntityType, Relationship } from '@/lib/types';
 
 interface ExplorerViewProps {
   entities: Entity[];
+  relationships?: Relationship[];
   onEntitySelect: (entity: Entity) => void;
   onBatchReclassify?: (entities: Entity[], domain: DomainType, type: EntityType) => void;
   onBatchDelete?: (entities: Entity[]) => void;
+  favorites?: string[];
+  onToggleFavorite?: (entityId: string) => void;
 }
 
-export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBatchDelete }: ExplorerViewProps) {
+export function ExplorerView({ entities, relationships = [], onEntitySelect, onBatchReclassify, onBatchDelete, favorites = [], onToggleFavorite }: ExplorerViewProps) {
   const [search, setSearch] = useState('');
   const [filterDomain, setFilterDomain] = useState<DomainType | 'all'>('all');
   const [filterType, setFilterType] = useState<EntityType | 'all'>('all');
@@ -33,6 +35,9 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
   const [maxRiskReward, setMaxRiskReward] = useState<number[]>([10]);
   const [minQualityGrade, setMinQualityGrade] = useState<number[]>([0]);
   const [filterTradeResult, setFilterTradeResult] = useState<'all' | 'win' | 'loss'>('all');
+  const [filterTag, setFilterTag] = useState('');
+  const [filterOrphan, setFilterOrphan] = useState<'all' | 'orphan' | 'connected'>('all');
+  const [filterFavorites, setFilterFavorites] = useState(false);
   
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedEntityIds, setSelectedEntityIds] = useState<Set<string>>(new Set());
@@ -74,6 +79,20 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
     return null;
   };
 
+  // Build connected-entity lookup for orphan filter
+  const connectedIds = useMemo(() => {
+    const ids = new Set<string>();
+    relationships.forEach(r => { ids.add(r.sourceId); ids.add(r.targetId); });
+    return ids;
+  }, [relationships]);
+
+  // Unique tags across all entities for tag filter dropdown
+  const allTags = useMemo(() => {
+    const tagSet = new Set<string>();
+    entities.forEach(e => e.tags?.forEach(t => tagSet.add(t)));
+    return Array.from(tagSet).sort();
+  }, [entities]);
+
   const filtered = useMemo(() => entities.filter(entity => {
     const matchesSearch = entity.name.toLowerCase().includes(search.toLowerCase()) ||
                          entity.description?.toLowerCase().includes(search.toLowerCase());
@@ -81,6 +100,16 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
     const matchesType = filterType === 'all' || entity.type === filterType;
     
     if (!matchesSearch || !matchesDomain || !matchesType) return false;
+
+    // Favorites filter
+    if (filterFavorites && !favorites.includes(entity.id)) return false;
+
+    // Tag filter
+    if (filterTag && !(entity.tags || []).includes(filterTag)) return false;
+
+    // Orphan filter
+    if (filterOrphan === 'orphan' && connectedIds.has(entity.id)) return false;
+    if (filterOrphan === 'connected' && !connectedIds.has(entity.id)) return false;
     
     if (entity.type === 'trade' && showAdvancedFilters) {
       const rr = calculateRR(entity);
@@ -96,7 +125,7 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
     }
     
     return true;
-  }), [entities, search, filterDomain, filterType, showAdvancedFilters, minRiskReward, maxRiskReward, minQualityGrade, filterTradeResult]);
+  }), [entities, search, filterDomain, filterType, showAdvancedFilters, minRiskReward, maxRiskReward, minQualityGrade, filterTradeResult, filterFavorites, favorites, filterTag, filterOrphan, connectedIds]);
 
   const groupedByDomain = useMemo(() => filtered.reduce((acc, entity) => {
     if (!acc[entity.domain]) acc[entity.domain] = [];
@@ -109,6 +138,9 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
     setMaxRiskReward([10]);
     setMinQualityGrade([0]);
     setFilterTradeResult('all');
+    setFilterTag('');
+    setFilterOrphan('all');
+    setFilterFavorites(false);
   };
 
   const toggleSelectionMode = () => {
@@ -138,6 +170,26 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
   };
 
   const selectedEntities = entities.filter(e => selectedEntityIds.has(e.id));
+
+  // Build flat row list for virtualizer: interleave domain headers and entity rows
+  type VirtualRow = { kind: 'header'; domain: string } | { kind: 'entity'; entity: Entity };
+  const virtualRows = useMemo<VirtualRow[]>(() => {
+    const rows: VirtualRow[] = [];
+    Object.entries(groupedByDomain).forEach(([domain, domainEntities]) => {
+      rows.push({ kind: 'header', domain });
+      domainEntities.forEach(entity => rows.push({ kind: 'entity', entity }));
+    });
+    return rows;
+  }, [groupedByDomain]);
+
+  const parentRef = useRef<HTMLDivElement>(null);
+
+  const virtualizer = useVirtualizer({
+    count: virtualRows.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: useCallback((index: number) => virtualRows[index]?.kind === 'header' ? 48 : 108, [virtualRows]),
+    overscan: 8,
+  });
 
   const handleBatchReclassify = (entities: Entity[], domain: DomainType, type: EntityType) => {
     if (onBatchReclassify) {
@@ -225,6 +277,16 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
             <Funnel size={16} />
             Advanced
           </Button>
+          {favorites.length > 0 && (
+            <Button
+              variant={filterFavorites ? 'default' : 'outline'}
+              onClick={() => setFilterFavorites(!filterFavorites)}
+              className="gap-2"
+            >
+              <Star size={16} weight={filterFavorites ? 'fill' : 'regular'} className={filterFavorites ? 'text-yellow-400' : ''} />
+              Favorites ({favorites.length})
+            </Button>
+          )}
           <div className="w-px h-8 bg-border" />
           <Button
             variant={selectionMode ? 'default' : 'outline'}
@@ -307,6 +369,35 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
                 </Select>
               </div>
 
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Tag Filter</Label>
+                <Select value={filterTag || '__all__'} onValueChange={(v) => setFilterTag(v === '__all__' ? '' : v)}>
+                  <SelectTrigger>
+                    <SelectValue placeholder="All Tags" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__all__">All Tags</SelectItem>
+                    {allTags.map(tag => (
+                      <SelectItem key={tag} value={tag}>{tag}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label className="text-sm font-medium">Connection Status</Label>
+                <Select value={filterOrphan} onValueChange={(v) => setFilterOrphan(v as 'all' | 'orphan' | 'connected')}>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">All Entities</SelectItem>
+                    <SelectItem value="connected">Connected Only</SelectItem>
+                    <SelectItem value="orphan">Orphans Only</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
               <div className="flex items-end">
                 <Button
                   variant="ghost"
@@ -333,96 +424,146 @@ export function ExplorerView({ entities, onEntitySelect, onBatchReclassify, onBa
         )}
       </div>
 
-      <ScrollArea className="h-[calc(100vh-320px)]">
-        <div className="space-y-6">
-          {Object.keys(groupedByDomain).length === 0 ? (
-            <Card className="p-12 text-center bg-card/50">
-              <MagnifyingGlass size={48} className="mx-auto mb-4 text-muted-foreground" />
-              <p className="text-muted-foreground">No entities found</p>
-            </Card>
-          ) : (
-            Object.entries(groupedByDomain).map(([domain, domainEntities]) => (
-              <div key={domain}>
-                <h3 className="text-lg font-semibold mb-3 capitalize">{domain.replace('_', ' ')}</h3>
-                <div className="grid gap-3">
-                  {domainEntities.map((entity) => {
-                    const rr = calculateRR(entity);
-                    const grade = getQualityGrade(entity);
-                    const result = getTradeResult(entity);
-                    
-                    const isSelected = selectedEntityIds.has(entity.id);
-                    
-                    return (
-                      <Card
-                        key={entity.id}
-                        className={`p-4 bg-card/50 backdrop-blur border-border/50 transition-all cursor-pointer ${
-                          isSelected 
-                            ? 'border-primary ring-2 ring-primary/20' 
-                            : 'hover:border-primary/50 hover:scale-[1.01]'
-                        }`}
-                        onClick={() => handleEntityClick(entity)}
-                      >
-                        <div className="flex items-start gap-3">
-                          {selectionMode && (
-                            <div className="pt-1" onClick={(e) => e.stopPropagation()}>
-                              <Checkbox
-                                checked={isSelected}
-                                onCheckedChange={() => toggleEntitySelection(entity.id)}
-                              />
-                            </div>
-                          )}
-                          <span className="text-2xl">{getEntityTypeIcon(entity.type)}</span>
-                          <div className="flex-1 min-w-0">
-                            <div className="flex items-center gap-2 flex-wrap">
-                              <h4 className="font-semibold">{entity.name}</h4>
-                              <Badge variant="secondary" className="text-xs">
-                                {entity.type}
-                              </Badge>
-                              {entity.validationStatus === 'valid' && (
-                                <Badge className="text-xs bg-primary/20 text-primary">VALID</Badge>
-                              )}
-                              {entity.validationStatus === 'invalid' && (
-                                <Badge variant="destructive" className="text-xs">INVALID</Badge>
-                              )}
-                              {rr !== null && (
-                                <Badge variant="outline" className="text-xs font-mono">
-                                  RR: {rr.toFixed(2)}
-                                </Badge>
-                              )}
-                              {grade !== null && (
-                                <Badge variant="outline" className="text-xs">
-                                  Grade: {grade}/10
-                                </Badge>
-                              )}
-                              {result && (
-                                <Badge variant={result === 'win' ? 'default' : 'destructive'} className="text-xs">
-                                  {result.toUpperCase()}
-                                </Badge>
-                              )}
-                            </div>
-                            {entity.description && (
-                              <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
-                                {entity.description}
-                              </p>
-                            )}
-                            <div className="flex gap-2 mt-2 flex-wrap">
-                              {entity.tags.slice(0, 3).map((tag) => (
-                                <span key={tag} className="text-xs px-2 py-0.5 rounded-md bg-secondary/50">
-                                  {tag}
-                                </span>
-                              ))}
-                            </div>
-                          </div>
+      <div
+        ref={parentRef}
+        className="h-[calc(100vh-320px)] overflow-auto"
+      >
+        {Object.keys(groupedByDomain).length === 0 ? (
+          <Card className="p-12 text-center bg-card/50">
+            <MagnifyingGlass size={48} className="mx-auto mb-4 text-muted-foreground" />
+            <p className="text-muted-foreground">No entities found</p>
+          </Card>
+        ) : (
+          <div
+            style={{
+              height: `${virtualizer.getTotalSize()}px`,
+              width: '100%',
+              position: 'relative',
+            }}
+          >
+            {virtualizer.getVirtualItems().map(virtualItem => {
+              const row = virtualRows[virtualItem.index];
+              if (row.kind === 'header') {
+                return (
+                  <div
+                    key={`header-${row.domain}`}
+                    style={{
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                      width: '100%',
+                      height: `${virtualItem.size}px`,
+                      transform: `translateY(${virtualItem.start}px)`,
+                    }}
+                    className="flex items-end pb-2"
+                  >
+                    <h3 className="text-lg font-semibold capitalize">{row.domain.replace('_', ' ')}</h3>
+                  </div>
+                );
+              }
+
+              const entity = row.entity;
+              const rr = calculateRR(entity);
+              const grade = getQualityGrade(entity);
+              const result = getTradeResult(entity);
+              const isSelected = selectedEntityIds.has(entity.id);
+
+              return (
+                <div
+                  key={entity.id}
+                  style={{
+                    position: 'absolute',
+                    top: 0,
+                    left: 0,
+                    width: '100%',
+                    height: `${virtualItem.size}px`,
+                    transform: `translateY(${virtualItem.start}px)`,
+                    padding: '4px 0',
+                  }}
+                >
+                  <Card
+                    className={`p-4 bg-card/50 backdrop-blur border-border/50 transition-all cursor-pointer h-full ${
+                      isSelected
+                        ? 'border-primary ring-2 ring-primary/20'
+                        : 'hover:border-primary/50 hover:scale-[1.005]'
+                    }`}
+                    onClick={() => handleEntityClick(entity)}
+                  >
+                    <div className="flex items-start gap-3">
+                      {selectionMode && (
+                        <div className="pt-1" onClick={(e) => e.stopPropagation()}>
+                          <Checkbox
+                            checked={isSelected}
+                            onCheckedChange={() => toggleEntitySelection(entity.id)}
+                          />
                         </div>
-                      </Card>
-                    );
-                  })}
+                      )}
+                      <span className="text-2xl">{getEntityTypeIcon(entity.type)}</span>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <h4 className="font-semibold">{entity.name}</h4>
+                          {favorites.includes(entity.id) && (
+                            <Star size={14} weight="fill" className="text-yellow-400 flex-shrink-0" />
+                          )}
+                          <Badge variant="secondary" className="text-xs">
+                            {entity.type}
+                          </Badge>
+                          {entity.validationStatus === 'valid' && (
+                            <Badge className="text-xs bg-primary/20 text-primary">VALID</Badge>
+                          )}
+                          {entity.validationStatus === 'invalid' && (
+                            <Badge variant="destructive" className="text-xs">INVALID</Badge>
+                          )}
+                          {rr !== null && (
+                            <Badge variant="outline" className="text-xs font-mono">
+                              RR: {rr.toFixed(2)}
+                            </Badge>
+                          )}
+                          {grade !== null && (
+                            <Badge variant="outline" className="text-xs">
+                              Grade: {grade}/10
+                            </Badge>
+                          )}
+                          {result && (
+                            <Badge variant={result === 'win' ? 'default' : 'destructive'} className="text-xs">
+                              {result.toUpperCase()}
+                            </Badge>
+                          )}
+                        </div>
+                        {entity.description && (
+                          <p className="text-sm text-muted-foreground mt-1 line-clamp-2">
+                            {entity.description}
+                          </p>
+                        )}
+                        <div className="flex gap-2 mt-2 flex-wrap">
+                          {entity.tags.slice(0, 3).map((tag) => (
+                            <span key={tag} className="text-xs px-2 py-0.5 rounded-md bg-secondary/50">
+                              {tag}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                      {onToggleFavorite && (
+                        <button
+                          className={`flex-shrink-0 p-1.5 rounded-md transition-colors ${
+                            favorites.includes(entity.id)
+                              ? 'text-yellow-400 hover:text-yellow-300'
+                              : 'text-muted-foreground/40 hover:text-yellow-400'
+                          }`}
+                          onClick={(e) => { e.stopPropagation(); onToggleFavorite(entity.id); }}
+                          title={favorites.includes(entity.id) ? 'Remove from favorites' : 'Add to favorites'}
+                        >
+                          <Star size={18} weight={favorites.includes(entity.id) ? 'fill' : 'regular'} />
+                        </button>
+                      )}
+                    </div>
+                  </Card>
                 </div>
-              </div>
-            ))
-          )}
-        </div>
-      </ScrollArea>
+              );
+            })}
+          </div>
+        )}
+      </div>
 
       <BatchOperationsBar
         selectedEntities={selectedEntities}

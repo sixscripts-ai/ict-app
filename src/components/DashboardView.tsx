@@ -2,7 +2,7 @@ import { Card } from '@/components/ui/card';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Database, BookOpen, Target, TrendUp, Cube, Code, Notebook, CirclesThreePlus, Graph, ChatsCircle, Brain, Lightning, Sparkle, ArrowRight, ChartLine, BookOpenText, Heart, Warning, Crown } from '@phosphor-icons/react';
+import { Database, BookOpen, Target, TrendUp, Cube, Code, Notebook, CirclesThreePlus, Graph, ChatsCircle, Brain, Lightning, Sparkle, ArrowRight, ChartLine, BookOpenText, Heart, Warning, Crown, Star } from '@phosphor-icons/react';
 import type { DatabaseStats, DomainType, EntityType, Entity, Relationship } from '@/lib/types';
 
 interface DashboardViewProps {
@@ -10,9 +10,12 @@ interface DashboardViewProps {
   onNavigate?: (tab: string) => void;
   entities?: Entity[];
   relationships?: Relationship[];
+  favorites?: string[];
+  onToggleFavorite?: (entityId: string) => void;
+  onEntitySelect?: (entity: Entity) => void;
 }
 
-export function DashboardView({ stats, onNavigate, entities = [], relationships = [] }: DashboardViewProps) {
+export function DashboardView({ stats, onNavigate, entities = [], relationships = [], favorites = [], onToggleFavorite, onEntitySelect }: DashboardViewProps) {
   const domainIcons: Record<DomainType, React.ReactNode> = {
     concepts: <BookOpen size={24} weight="duotone" />,
     models: <Target size={24} weight="duotone" />,
@@ -154,6 +157,61 @@ export function DashboardView({ stats, onNavigate, entities = [], relationships 
           ))}
         </div>
       </Card>
+
+      {/* Favorites */}
+      {favorites.length > 0 && (() => {
+        const favEntities = entities.filter(e => favorites.includes(e.id));
+        if (favEntities.length === 0) return null;
+        return (
+          <Card className="p-6 bg-card/50 backdrop-blur border-border/50">
+            <div className="flex items-center justify-between mb-4">
+              <div className="flex items-center gap-2">
+                <Star size={18} className="text-yellow-400" weight="fill" />
+                <h2 className="text-lg font-semibold">Favorites</h2>
+                <Badge variant="secondary" className="text-xs">{favEntities.length}</Badge>
+              </div>
+              {onNavigate && (
+                <Button variant="ghost" size="sm" className="gap-1 text-xs text-muted-foreground hover:text-primary" onClick={() => onNavigate('explorer')}>
+                  View all <ArrowRight size={12} />
+                </Button>
+              )}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {favEntities.slice(0, 6).map(entity => (
+                <div
+                  key={entity.id}
+                  className="group flex items-start gap-3 p-3 rounded-lg bg-secondary/20 hover:bg-secondary/40 border border-transparent hover:border-yellow-500/20 transition-all cursor-pointer"
+                  onClick={() => onEntitySelect?.(entity)}
+                >
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-semibold truncate group-hover:text-yellow-400 transition-colors">{entity.name}</p>
+                      <Badge variant="outline" className="text-[10px] px-1.5 py-0 h-4 flex-shrink-0">{entity.type}</Badge>
+                    </div>
+                    {entity.description && (
+                      <p className="text-xs text-muted-foreground mt-1 line-clamp-1">{entity.description}</p>
+                    )}
+                  </div>
+                  {onToggleFavorite && (
+                    <button
+                      className="flex-shrink-0 p-1 text-yellow-400 hover:text-yellow-300 transition-colors"
+                      onClick={(e) => { e.stopPropagation(); onToggleFavorite(entity.id); }}
+                      title="Remove from favorites"
+                    >
+                      <Star size={16} weight="fill" />
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+            {favEntities.length > 6 && (
+              <p className="text-xs text-muted-foreground mt-3 text-center">
+                +{favEntities.length - 6} more — view in Explorer
+              </p>
+            )}
+          </Card>
+        );
+      })()}
 
       {/* Entities by Domain */}
       <Card className="p-6 bg-card/50 backdrop-blur border-border/50">

@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Separator } from '@/components/ui/separator';
-import { Copy, Check, PencilSimple, X, FloppyDisk, Tag, Plus } from '@phosphor-icons/react';
+import { Copy, Check, PencilSimple, X, FloppyDisk, Tag, Plus, Star } from '@phosphor-icons/react';
 import { getEntityTypeIcon } from '@/lib/ai-processor';
 import type { Entity, Relationship } from '@/lib/types';
 
@@ -18,6 +18,8 @@ interface EntityDetailDialogProps {
   onOpenChange: (open: boolean) => void;
   onEntityClick: (entity: Entity) => void;
   onEntityUpdate?: (id: string, updates: Partial<Pick<Entity, 'name' | 'description' | 'tags'>>) => void;
+  isFavorite?: boolean;
+  onToggleFavorite?: (entityId: string) => void;
 }
 
 export function EntityDetailDialog({ 
@@ -27,7 +29,9 @@ export function EntityDetailDialog({
   open, 
   onOpenChange,
   onEntityClick,
-  onEntityUpdate
+  onEntityUpdate,
+  isFavorite,
+  onToggleFavorite
 }: EntityDetailDialogProps) {
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isEditing, setIsEditing] = useState(false);
@@ -127,6 +131,18 @@ export function EntityDetailDialog({
                 )}
                 {onEntityUpdate && (
                   <div className="ml-auto flex items-center gap-1.5">
+                    {onToggleFavorite && entity && (
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        className={`h-7 gap-1.5 text-xs ${isFavorite ? 'text-yellow-400 hover:text-yellow-300' : 'text-muted-foreground hover:text-yellow-400'}`}
+                        onClick={() => onToggleFavorite(entity.id)}
+                        title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                      >
+                        <Star size={14} weight={isFavorite ? 'fill' : 'regular'} />
+                        {isFavorite ? 'Starred' : 'Star'}
+                      </Button>
+                    )}
                     {isEditing ? (
                       <>
                         <Button size="sm" variant="ghost" className="h-7 gap-1.5 text-xs text-muted-foreground" onClick={handleCancel}>

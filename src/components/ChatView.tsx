@@ -1,11 +1,12 @@
-import { useState, useRef, useEffect, useMemo } from 'react';
+import { useState, useRef, useEffect, useMemo, useCallback } from 'react';
 import { useKV } from '@/hooks/use-kv';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { PaperPlaneRight, User, Brain, Trash, BookOpen, Target, ChartLine, Flask, Lightbulb, DownloadSimple, FileText, FileMd } from '@phosphor-icons/react';
+import { PaperPlaneRight, User, Brain, Trash, BookOpen, Target, ChartLine, Flask, Lightbulb, DownloadSimple, FileText, FileMd, Plus, PencilSimple, Check, X, ChatDots, List } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -13,7 +14,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
-import type { ChatMessage, Entity } from '@/lib/types';
+import type { ChatMessage, ChatSession, Entity } from '@/lib/types';
 
 /** Lightweight markdown renderer — no external deps needed */
 function MarkdownContent({ content }: { content: string }) {
@@ -43,22 +44,16 @@ function MarkdownContent({ content }: { content: string }) {
     };
 
     const renderInline = (text: string): React.ReactNode => {
-      // Process inline markdown: bold, italic, code, links
       const parts: React.ReactNode[] = [];
       let remaining = text;
       let inlineKey = 0;
 
       while (remaining.length > 0) {
-        // Bold **text** or __text__
         const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*/s) || remaining.match(/^(.*?)__(.+?)__/s);
-        // Inline code `text`
         const codeMatch = remaining.match(/^(.*?)`([^`]+)`/);
-        // Italic *text* or _text_ (but not inside **)
         const italicMatch = remaining.match(/^(.*?)(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/s) || remaining.match(/^(.*?)(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/s);
-        // Link [text](url)
         const linkMatch = remaining.match(/^(.*?)\[([^\]]+)\]\(([^)]+)\)/);
 
-        // Find the earliest match
         type MatchInfo = { match: RegExpMatchArray; type: string; pos: number };
         const candidates: MatchInfo[] = [];
         if (boldMatch && boldMatch[1] !== undefined) candidates.push({ match: boldMatch, type: 'bold', pos: boldMatch[1].length });
@@ -103,7 +98,6 @@ function MarkdownContent({ content }: { content: string }) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i];
 
-      // Code block toggle
       if (line.trimStart().startsWith('```')) {
         if (!inCodeBlock) {
           flushList();
@@ -136,7 +130,6 @@ function MarkdownContent({ content }: { content: string }) {
         continue;
       }
 
-      // Headings
       const h3Match = line.match(/^###\s+(.+)/);
       const h2Match = line.match(/^##\s+(.+)/);
       const h1Match = line.match(/^#\s+(.+)/);
@@ -144,14 +137,12 @@ function MarkdownContent({ content }: { content: string }) {
       if (h2Match) { flushList(); elements.push(<h3 key={key++} className="text-base font-semibold mt-4 mb-2 text-foreground">{renderInline(h2Match[1])}</h3>); continue; }
       if (h1Match) { flushList(); elements.push(<h2 key={key++} className="text-lg font-semibold mt-4 mb-2 text-foreground">{renderInline(h1Match[1])}</h2>); continue; }
 
-      // Horizontal rule
       if (/^---+$/.test(line.trim()) || /^\*\*\*+$/.test(line.trim())) {
         flushList();
         elements.push(<hr key={key++} className="my-3 border-border/50" />);
         continue;
       }
 
-      // List items
       const ulMatch = line.match(/^(\s*)[-*+]\s+(.+)/);
       const olMatch = line.match(/^(\s*)(\d+)[.)]\s+(.+)/);
       if (ulMatch) {
@@ -163,10 +154,8 @@ function MarkdownContent({ content }: { content: string }) {
         continue;
       }
 
-      // If we were in a list and hit a non-list line, flush
       flushList();
 
-      // Blockquote
       const bqMatch = line.match(/^>\s*(.*)/);
       if (bqMatch) {
         elements.push(
@@ -177,19 +166,15 @@ function MarkdownContent({ content }: { content: string }) {
         continue;
       }
 
-      // Empty line
       if (line.trim() === '') {
         continue;
       }
 
-      // Regular paragraph
       elements.push(<p key={key++} className="text-sm leading-relaxed my-1.5">{renderInline(line)}</p>);
     }
 
-    // Flush remaining list items
     flushList();
 
-    // Flush unclosed code block
     if (inCodeBlock && codeBlockLines.length > 0) {
       elements.push(
         <pre key={key++} className="p-3 my-3 bg-secondary/30 rounded-lg overflow-x-auto border border-border/50">
@@ -217,15 +202,64 @@ interface PromptCategory {
   description: string;
 }
 
+function createSession(name?: string): ChatSession {
+  const now = new Date().toISOString();
+  return {
+    id: `session-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    name: name || `Chat ${new Date().toLocaleDateString()} ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
+    createdAt: now,
+    updatedAt: now,
+    messages: [],
+  };
+}
+
 export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
-  const [messages, setMessages] = useKV<ChatMessage[]>('chat-history', []);
+  const [sessions, setSessions] = useKV<ChatSession[]>('chat-sessions', []);
+  const [activeSessionId, setActiveSessionId] = useKV<string>('chat-active-session', '');
+  // Legacy migration: read old flat chat-history and migrate once
+  const [legacyMessages, , deleteLegacy] = useKV<ChatMessage[]>('chat-history', []);
+
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState('concepts');
+  const [showSidebar, setShowSidebar] = useState(true);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const safeMessages = messages || [];
+  const safeSessions = sessions || [];
+
+  // Migrate legacy chat-history into first session
+  useEffect(() => {
+    const legacy = legacyMessages || [];
+    if (legacy.length > 0 && safeSessions.length === 0) {
+      const migrated: ChatSession = {
+        id: `session-migrated-${Date.now()}`,
+        name: 'Previous Chat',
+        createdAt: legacy[0]?.timestamp || new Date().toISOString(),
+        updatedAt: legacy[legacy.length - 1]?.timestamp || new Date().toISOString(),
+        messages: legacy,
+      };
+      setSessions([migrated]);
+      setActiveSessionId(migrated.id);
+      deleteLegacy();
+    }
+  }, [legacyMessages, safeSessions.length]);
+
+  // Auto-create a session if none exist
+  useEffect(() => {
+    if (safeSessions.length === 0) {
+      const first = createSession('New Chat');
+      setSessions([first]);
+      setActiveSessionId(first.id);
+    } else if (!activeSessionId || !safeSessions.find(s => s.id === activeSessionId)) {
+      setActiveSessionId(safeSessions[0].id);
+    }
+  }, [safeSessions.length, activeSessionId]);
+
+  const activeSession = safeSessions.find(s => s.id === activeSessionId) || safeSessions[0];
+  const safeMessages = activeSession?.messages || [];
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -241,6 +275,13 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
     }
   }, [input]);
 
+  const updateActiveSession = useCallback((updater: (session: ChatSession) => ChatSession) => {
+    setSessions((current) => {
+      const cur = current || [];
+      return cur.map(s => s.id === activeSessionId ? updater(s) : s);
+    });
+  }, [activeSessionId]);
+
   const handleSubmit = async () => {
     if (!input.trim() || isLoading) return;
 
@@ -251,7 +292,11 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
       timestamp: new Date().toISOString()
     };
 
-    setMessages((currentMessages) => [...(currentMessages || []), userMessage]);
+    updateActiveSession(s => ({
+      ...s,
+      updatedAt: new Date().toISOString(),
+      messages: [...s.messages, userMessage],
+    }));
     setInput('');
     setIsLoading(true);
 
@@ -266,7 +311,11 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
         timestamp: new Date().toISOString()
       };
 
-      setMessages((currentMessages) => [...(currentMessages || []), assistantMessage]);
+      updateActiveSession(s => ({
+        ...s,
+        updatedAt: new Date().toISOString(),
+        messages: [...s.messages, assistantMessage],
+      }));
     } catch (error) {
       const errorMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
@@ -274,15 +323,50 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
         content: 'Sorry, I encountered an error processing your question.',
         timestamp: new Date().toISOString()
       };
-      setMessages((currentMessages) => [...(currentMessages || []), errorMessage]);
+      updateActiveSession(s => ({
+        ...s,
+        updatedAt: new Date().toISOString(),
+        messages: [...s.messages, errorMessage],
+      }));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleClearHistory = () => {
-    setMessages([]);
-    toast.success('Chat history cleared');
+  const handleNewSession = () => {
+    const newSession = createSession();
+    setSessions((current) => [newSession, ...(current || [])]);
+    setActiveSessionId(newSession.id);
+  };
+
+  const handleDeleteSession = (sessionId: string) => {
+    setSessions((current) => {
+      const cur = (current || []).filter(s => s.id !== sessionId);
+      if (cur.length === 0) {
+        const fresh = createSession('New Chat');
+        setTimeout(() => setActiveSessionId(fresh.id), 0);
+        return [fresh];
+      }
+      if (sessionId === activeSessionId) {
+        setTimeout(() => setActiveSessionId(cur[0].id), 0);
+      }
+      return cur;
+    });
+    toast.success('Session deleted');
+  };
+
+  const handleRenameSession = (sessionId: string) => {
+    if (!renameValue.trim()) { setRenamingId(null); return; }
+    setSessions((current) =>
+      (current || []).map(s => s.id === sessionId ? { ...s, name: renameValue.trim() } : s)
+    );
+    setRenamingId(null);
+    toast.success('Session renamed');
+  };
+
+  const handleClearSession = () => {
+    updateActiveSession(s => ({ ...s, messages: [], updatedAt: new Date().toISOString() }));
+    toast.success('Session cleared');
   };
 
   const exportToMarkdown = () => {
@@ -291,13 +375,13 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
       return;
     }
 
-    let markdown = '# ICT Knowledge Engine Chat Export\n\n';
+    let markdown = `# ${activeSession?.name || 'ICT Chat'} Export\n\n`;
     markdown += `*Exported: ${new Date().toLocaleString()}*\n\n`;
     markdown += `**Total Messages:** ${safeMessages.length}\n\n`;
     markdown += '---\n\n';
 
     safeMessages.forEach((message, index) => {
-      const role = message.role === 'user' ? '👤 User' : '🤖 Assistant';
+      const role = message.role === 'user' ? 'User' : 'Assistant';
       const timestamp = new Date(message.timestamp).toLocaleString();
       
       markdown += `## ${role} - ${timestamp}\n\n`;
@@ -320,7 +404,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ict-chat-export-${Date.now()}.md`;
+    a.download = `ict-chat-${(activeSession?.name || 'export').replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.md`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -337,9 +421,10 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
 
     const exportData = {
       metadata: {
+        sessionName: activeSession?.name,
         exportedAt: new Date().toISOString(),
         totalMessages: safeMessages.length,
-        exportVersion: '1.0'
+        exportVersion: '2.0'
       },
       messages: safeMessages.map(message => ({
         id: message.id,
@@ -360,7 +445,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `ict-chat-export-${Date.now()}.json`;
+    a.download = `ict-chat-${(activeSession?.name || 'export').replace(/\s+/g, '-').toLowerCase()}-${Date.now()}.json`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -445,7 +530,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
         "Analyze the relationship between Market Structure and Order Flow alignment.",
         "How does multi-timeframe PD array confluence affect setup quality?",
         "What pre-entry conditions distinguish A+ setups from lower grades?",
-        "Explain the sequence: liquidity grab → displacement → FVG → entry logic.",
+        "Explain the sequence: liquidity grab > displacement > FVG > entry logic.",
         "How do session-specific characteristics affect setup performance?",
         "What role does volume/spread expansion play in displacement validation?",
         "Compare algorithmic behavior patterns: trending vs ranging market states."
@@ -456,189 +541,270 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
   const currentCategory = promptCategories.find(cat => cat.id === selectedCategory) || promptCategories[0];
 
   return (
-    <div className="flex flex-col h-[calc(100vh-120px)]">
-      <div className="mb-4 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-semibold tracking-tight">AI Chat</h1>
-          <p className="text-muted-foreground mt-1">Ask questions about your ICT knowledge base</p>
-        </div>
-        {safeMessages.length > 0 && (
-          <div className="flex items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="sm" className="gap-2">
-                  <DownloadSimple size={16} />
-                  Export
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={exportToMarkdown} className="gap-2 cursor-pointer">
-                  <FileMd size={16} />
-                  Export as Markdown
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={exportToJSON} className="gap-2 cursor-pointer">
-                  <FileText size={16} />
-                  Export as JSON
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={handleClearHistory}
-              className="gap-2"
-            >
-              <Trash size={16} />
-              Clear History
+    <div className="flex h-[calc(100vh-120px)]">
+      {/* Session Sidebar */}
+      <div className={`${showSidebar ? 'w-64' : 'w-0'} flex-shrink-0 transition-all duration-200 overflow-hidden border-r border-border/50`}>
+        <div className="w-64 h-full flex flex-col">
+          <div className="p-3 border-b border-border/50 flex items-center justify-between">
+            <span className="text-sm font-semibold">Sessions</span>
+            <Button variant="ghost" size="sm" className="h-7 w-7 p-0" onClick={handleNewSession} title="New session">
+              <Plus size={16} />
             </Button>
           </div>
-        )}
+          <ScrollArea className="flex-1">
+            <div className="p-2 space-y-1">
+              {safeSessions.map(session => (
+                <div
+                  key={session.id}
+                  className={`group flex items-center gap-2 px-3 py-2 rounded-lg cursor-pointer transition-colors text-sm ${
+                    session.id === activeSessionId 
+                      ? 'bg-primary/10 text-primary border border-primary/20' 
+                      : 'hover:bg-secondary/40 border border-transparent'
+                  }`}
+                  onClick={() => setActiveSessionId(session.id)}
+                >
+                  <ChatDots size={14} className="flex-shrink-0" />
+                  {renamingId === session.id ? (
+                    <div className="flex-1 flex items-center gap-1">
+                      <Input
+                        value={renameValue}
+                        onChange={e => setRenameValue(e.target.value)}
+                        className="h-6 text-xs flex-1 py-0"
+                        autoFocus
+                        onKeyDown={e => {
+                          if (e.key === 'Enter') handleRenameSession(session.id);
+                          if (e.key === 'Escape') setRenamingId(null);
+                        }}
+                        onClick={e => e.stopPropagation()}
+                      />
+                      <button className="text-green-400 hover:text-green-300" onClick={e => { e.stopPropagation(); handleRenameSession(session.id); }}>
+                        <Check size={12} />
+                      </button>
+                      <button className="text-muted-foreground hover:text-foreground" onClick={e => { e.stopPropagation(); setRenamingId(null); }}>
+                        <X size={12} />
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="flex-1 min-w-0">
+                        <p className="truncate text-xs font-medium">{session.name}</p>
+                        <p className="text-[10px] text-muted-foreground">{session.messages.length} msgs</p>
+                      </div>
+                      <div className="hidden group-hover:flex items-center gap-0.5">
+                        <button
+                          className="p-0.5 rounded text-muted-foreground hover:text-foreground"
+                          onClick={e => { e.stopPropagation(); setRenamingId(session.id); setRenameValue(session.name); }}
+                          title="Rename"
+                        >
+                          <PencilSimple size={12} />
+                        </button>
+                        <button
+                          className="p-0.5 rounded text-muted-foreground hover:text-red-400"
+                          onClick={e => { e.stopPropagation(); handleDeleteSession(session.id); }}
+                          title="Delete"
+                        >
+                          <Trash size={12} />
+                        </button>
+                      </div>
+                    </>
+                  )}
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+        </div>
       </div>
 
-      {safeMessages.length === 0 && (
-        <Card className="p-8 bg-card/50 backdrop-blur border-border/50 mb-4">
-          <div className="space-y-6">
-            <div className="text-center space-y-3">
-              <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-accent/20 to-primary/20">
-                <Brain size={32} weight="duotone" className="text-accent" />
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold">ICT Knowledge Analysis</h3>
-                <p className="text-sm text-muted-foreground mt-1">
-                  Query concepts, filter trade setups, analyze patterns, and explore model relationships
-                </p>
-              </div>
-            </div>
-
+      {/* Main Chat Area */}
+      <div className="flex-1 flex flex-col min-w-0">
+        <div className="mb-4 px-4 pt-4 flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Button variant="ghost" size="sm" className="h-8 w-8 p-0" onClick={() => setShowSidebar(!showSidebar)} title={showSidebar ? 'Hide sessions' : 'Show sessions'}>
+              <List size={18} />
+            </Button>
             <div>
-              <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-                <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 mb-4">
-                  {promptCategories.map((category) => (
-                    <TabsTrigger 
-                      key={category.id} 
-                      value={category.id}
-                      className="gap-1.5 text-xs"
-                    >
-                      {category.icon}
-                      <span className="hidden sm:inline">{category.label}</span>
-                      <span className="sm:hidden">{category.label.slice(0, 5)}</span>
-                    </TabsTrigger>
-                  ))}
-                </TabsList>
-
-                <div className="mb-4">
-                  <p className="text-xs text-muted-foreground text-center">
-                    {currentCategory.description}
-                  </p>
-                </div>
-
-                <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto">
-                  {currentCategory.prompts.map((prompt) => (
-                    <button
-                      key={prompt}
-                      onClick={() => setInput(prompt)}
-                      className="p-3 text-left text-sm rounded-lg bg-secondary/30 hover:bg-secondary/50 hover:border-accent/30 transition-all border border-border/50 group"
-                    >
-                      <span className="group-hover:text-accent transition-colors">{prompt}</span>
-                    </button>
-                  ))}
-                </div>
-              </Tabs>
+              <h1 className="text-xl font-semibold tracking-tight">{activeSession?.name || 'AI Chat'}</h1>
+              <p className="text-xs text-muted-foreground">Ask questions about your ICT knowledge base</p>
             </div>
           </div>
-        </Card>
-      )}
+          {safeMessages.length > 0 && (
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="gap-2">
+                    <DownloadSimple size={16} />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={exportToMarkdown} className="gap-2 cursor-pointer">
+                    <FileMd size={16} />
+                    Export as Markdown
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={exportToJSON} className="gap-2 cursor-pointer">
+                    <FileText size={16} />
+                    Export as JSON
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleClearSession}
+                className="gap-2"
+              >
+                <Trash size={16} />
+                Clear
+              </Button>
+            </div>
+          )}
+        </div>
 
-      <ScrollArea className="flex-1 mb-4" ref={scrollRef}>
-        <div className="space-y-4 pr-4">
-          {safeMessages.map((message) => (
-            <div key={message.id} className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-              {message.role === 'assistant' && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-accent/10 to-accent/5 flex items-center justify-center">
-                  <Brain size={20} weight="duotone" className="text-accent" />
+        {safeMessages.length === 0 && (
+          <div className="px-4">
+            <Card className="p-8 bg-card/50 backdrop-blur border-border/50 mb-4">
+              <div className="space-y-6">
+                <div className="text-center space-y-3">
+                  <div className="inline-flex items-center justify-center w-16 h-16 rounded-xl bg-gradient-to-br from-accent/20 to-primary/20">
+                    <Brain size={32} weight="duotone" className="text-accent" />
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-semibold">ICT Knowledge Analysis</h3>
+                    <p className="text-sm text-muted-foreground mt-1">
+                      Query concepts, filter trade setups, analyze patterns, and explore model relationships
+                    </p>
+                  </div>
                 </div>
-              )}
-              <Card className={`max-w-[80%] p-4 ${
-                message.role === 'user' 
-                  ? 'bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20' 
-                  : 'bg-card/50 backdrop-blur border-border/50'
-              }`}>
-                {message.role === 'user' ? (
-                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
-                ) : (
-                  <MarkdownContent content={message.content} />
-                )}
-                {message.sources && message.sources.length > 0 && (
-                  <div className="mt-3 pt-3 border-t border-border/50">
-                    <p className="text-xs text-muted-foreground mb-2 font-medium">Sources:</p>
-                    <div className="flex flex-wrap gap-2">
-                      {message.sources.map((source) => (
-                        <Badge 
-                          key={source.id} 
-                          variant="secondary" 
-                          className="text-xs hover:bg-accent/10 hover:text-accent transition-colors cursor-default"
+
+                <div>
+                  <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 mb-4">
+                      {promptCategories.map((category) => (
+                        <TabsTrigger 
+                          key={category.id} 
+                          value={category.id}
+                          className="gap-1.5 text-xs"
                         >
-                          {source.name}
-                        </Badge>
+                          {category.icon}
+                          <span className="hidden sm:inline">{category.label}</span>
+                          <span className="sm:hidden">{category.label.slice(0, 5)}</span>
+                        </TabsTrigger>
+                      ))}
+                    </TabsList>
+
+                    <div className="mb-4">
+                      <p className="text-xs text-muted-foreground text-center">
+                        {currentCategory.description}
+                      </p>
+                    </div>
+
+                    <div className="grid grid-cols-1 gap-2 max-h-[300px] overflow-y-auto">
+                      {currentCategory.prompts.map((prompt) => (
+                        <button
+                          key={prompt}
+                          onClick={() => setInput(prompt)}
+                          className="p-3 text-left text-sm rounded-lg bg-secondary/30 hover:bg-secondary/50 hover:border-accent/30 transition-all border border-border/50 group"
+                        >
+                          <span className="group-hover:text-accent transition-colors">{prompt}</span>
+                        </button>
                       ))}
                     </div>
+                  </Tabs>
+                </div>
+              </div>
+            </Card>
+          </div>
+        )}
+
+        <ScrollArea className="flex-1 mb-4 px-4" ref={scrollRef}>
+          <div className="space-y-4 pr-4">
+            {safeMessages.map((message) => (
+              <div key={message.id} className={`flex gap-3 ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+                {message.role === 'assistant' && (
+                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-accent/10 to-accent/5 flex items-center justify-center">
+                    <Brain size={20} weight="duotone" className="text-accent" />
                   </div>
                 )}
-                <span className="text-xs text-muted-foreground mt-2 block opacity-60">
-                  {new Date(message.timestamp).toLocaleTimeString()}
-                </span>
-              </Card>
-              {message.role === 'user' && (
-                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
-                  <User size={20} weight="duotone" className="text-primary" />
-                </div>
-              )}
-            </div>
-          ))}
-          {isLoading && (
-            <div className="flex gap-3 justify-start">
-              <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-accent/10 to-accent/5 flex items-center justify-center">
-                <Brain size={20} weight="duotone" className="text-accent animate-pulse" />
+                <Card className={`max-w-[80%] p-4 ${
+                  message.role === 'user' 
+                    ? 'bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20' 
+                    : 'bg-card/50 backdrop-blur border-border/50'
+                }`}>
+                  {message.role === 'user' ? (
+                    <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                  ) : (
+                    <MarkdownContent content={message.content} />
+                  )}
+                  {message.sources && message.sources.length > 0 && (
+                    <div className="mt-3 pt-3 border-t border-border/50">
+                      <p className="text-xs text-muted-foreground mb-2 font-medium">Sources:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {message.sources.map((source) => (
+                          <Badge 
+                            key={source.id} 
+                            variant="secondary" 
+                            className="text-xs hover:bg-accent/10 hover:text-accent transition-colors cursor-default"
+                          >
+                            {source.name}
+                          </Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <span className="text-xs text-muted-foreground mt-2 block opacity-60">
+                    {new Date(message.timestamp).toLocaleTimeString()}
+                  </span>
+                </Card>
+                {message.role === 'user' && (
+                  <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-primary/10 to-primary/5 flex items-center justify-center">
+                    <User size={20} weight="duotone" className="text-primary" />
+                  </div>
+                )}
               </div>
-              <Card className="p-4 bg-card/50 backdrop-blur border-border/50">
-                <div className="flex gap-1.5">
-                  <div className="w-2 h-2 rounded-full bg-accent animate-bounce" style={{ animationDelay: '0ms' }} />
-                  <div className="w-2 h-2 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }} />
-                  <div className="w-2 h-2 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }} />
+            ))}
+            {isLoading && (
+              <div className="flex gap-3 justify-start">
+                <div className="flex-shrink-0 w-8 h-8 rounded-lg bg-gradient-to-br from-accent/10 to-accent/5 flex items-center justify-center">
+                  <Brain size={20} weight="duotone" className="text-accent animate-pulse" />
                 </div>
-              </Card>
-            </div>
-          )}
-        </div>
-      </ScrollArea>
+                <Card className="p-4 bg-card/50 backdrop-blur border-border/50">
+                  <div className="flex gap-1.5">
+                    <div className="w-2 h-2 rounded-full bg-accent animate-bounce" style={{ animationDelay: '0ms' }} />
+                    <div className="w-2 h-2 rounded-full bg-accent animate-bounce" style={{ animationDelay: '150ms' }} />
+                    <div className="w-2 h-2 rounded-full bg-accent animate-bounce" style={{ animationDelay: '300ms' }} />
+                  </div>
+                </Card>
+              </div>
+            )}
+          </div>
+        </ScrollArea>
 
-      <div className="space-y-2">
-        <div className="flex gap-2">
-          <textarea
-            ref={textareaRef}
-            placeholder="Ask about ICT concepts, filter trades, analyze patterns..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && !e.shiftKey) {
-                e.preventDefault();
-                handleSubmit();
-              }
-            }}
-            disabled={isLoading}
-            rows={1}
-            className="flex-1 min-h-[40px] max-h-[120px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-          />
-          <Button onClick={handleSubmit} disabled={!input.trim() || isLoading} className="gap-2">
-            <PaperPlaneRight size={16} weight="bold" />
-          </Button>
-        </div>
-        
-        <div className="flex items-center justify-between text-xs text-muted-foreground">
-          <span>Knowledge base: {entities.length} entities</span>
-          {safeMessages.length > 0 && (
-            <span>{safeMessages.length} messages in history</span>
-          )}
+        <div className="space-y-2 px-4 pb-4">
+          <div className="flex gap-2">
+            <textarea
+              ref={textareaRef}
+              placeholder="Ask about ICT concepts, filter trades, analyze patterns..."
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  handleSubmit();
+                }
+              }}
+              disabled={isLoading}
+              rows={1}
+              className="flex-1 min-h-[40px] max-h-[120px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            />
+            <Button onClick={handleSubmit} disabled={!input.trim() || isLoading} className="gap-2">
+              <PaperPlaneRight size={16} weight="bold" />
+            </Button>
+          </div>
+          
+          <div className="flex items-center justify-between text-xs text-muted-foreground">
+            <span>Knowledge base: {entities.length} entities</span>
+            <span>{safeSessions.length} session{safeSessions.length !== 1 ? 's' : ''} · {safeMessages.length} messages</span>
+          </div>
         </div>
       </div>
     </div>

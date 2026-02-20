@@ -3,7 +3,7 @@ import { useKV } from '@/hooks/use-kv';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, MagicWand, Lightning, ChartLine, BookOpenText, BookOpen, GithubLogo, ArrowSquareOut, GearSix, Warning, Flask, MagnifyingGlass, DownloadSimple } from '@phosphor-icons/react';
+import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, MagicWand, Lightning, ChartLine, BookOpenText, BookOpen, GithubLogo, ArrowSquareOut, GearSix, Warning, Flask, MagnifyingGlass, DownloadSimple, ShieldCheck, Cards } from '@phosphor-icons/react';
 import { DashboardView } from '@/components/DashboardView';
 import { ExplorerView } from '@/components/ExplorerView';
 import { UploadView } from '@/components/UploadView';
@@ -15,6 +15,8 @@ import { SemanticSearchView } from '@/components/SemanticSearchView';
 import { RecommendationsView } from '@/components/RecommendationsView';
 import { SkillsView } from '@/components/SkillsView';
 import { AnalyticsView } from '@/components/AnalyticsView';
+import { KnowledgeGapView } from '@/components/KnowledgeGapView';
+import { QuizView } from '@/components/QuizView';
 import { ResearchView } from '@/components/ResearchView';
 import { KnowledgeBaseView } from '@/components/KnowledgeBaseView';
 import { EntityDetailDialog } from '@/components/EntityDetailDialog';
@@ -32,6 +34,7 @@ function App() {
   const [uploads, setUploads] = useKV<UploadType[]>('ict-uploads', []);
   const [logs, setLogs] = useKV<FileProcessingLog[]>('ict-logs', []);
   const [chatMessages, setChatMessages] = useKV<import('@/lib/types').ChatMessage[]>('chat-history', []);
+  const [favorites, setFavorites] = useKV<string[]>('favorites', []);
   
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
@@ -50,6 +53,7 @@ function App() {
   const safeUploads = uploads || [];
   const safeLogs = logs || [];
   const safeChatMessages = chatMessages || [];
+  const safeFavorites = favorites || [];
 
   // Auto-load ICT knowledge base on first visit
   const [hasAutoLoaded, setHasAutoLoaded] = useKV<boolean>('auto-loaded-v2', false);
@@ -297,6 +301,13 @@ function App() {
     toast.success('Entity updated');
   }, []);
 
+  const handleToggleFavorite = useCallback((entityId: string) => {
+    setFavorites((current) => {
+      const cur = current || [];
+      return cur.includes(entityId) ? cur.filter(id => id !== entityId) : [...cur, entityId];
+    });
+  }, []);
+
   const handleExportKnowledgeBase = useCallback(() => {
     const payload = {
       exportedAt: new Date().toISOString(),
@@ -354,6 +365,14 @@ function App() {
       case 'skills':
         setActiveTab('analytics');
         setAnalyticsTab('skills');
+        break;
+      case 'gaps':
+        setActiveTab('analytics');
+        setAnalyticsTab('gaps');
+        break;
+      case 'quiz':
+        setActiveTab('analytics');
+        setAnalyticsTab('quiz');
         break;
       default:
         setActiveTab(tab);
@@ -639,7 +658,7 @@ Instructions:
           </div>
 
           <TabsContent value="dashboard">
-            <DashboardView stats={stats} onNavigate={handleNavigate} entities={safeEntities} relationships={safeRelationships} />
+            <DashboardView stats={stats} onNavigate={handleNavigate} entities={safeEntities} relationships={safeRelationships} favorites={safeFavorites} onToggleFavorite={handleToggleFavorite} onEntitySelect={handleEntitySelect} />
           </TabsContent>
 
           <TabsContent value="knowledge">
@@ -665,9 +684,12 @@ Instructions:
               <TabsContent value="explorer">
                 <ExplorerView 
                   entities={safeEntities} 
+                  relationships={safeRelationships}
                   onEntitySelect={handleEntitySelect}
                   onBatchReclassify={handleBatchReclassify}
                   onBatchDelete={handleBatchDelete}
+                  favorites={safeFavorites}
+                  onToggleFavorite={handleToggleFavorite}
                 />
               </TabsContent>
               <TabsContent value="graph">
@@ -710,6 +732,14 @@ Instructions:
                   <Lightning size={14} />
                   Skills
                 </TabsTrigger>
+                <TabsTrigger value="gaps" className="gap-2">
+                  <ShieldCheck size={14} />
+                  Gaps
+                </TabsTrigger>
+                <TabsTrigger value="quiz" className="gap-2">
+                  <Cards size={14} />
+                  Quiz
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="analytics">
                 <AnalyticsView entities={safeEntities} />
@@ -743,6 +773,16 @@ Instructions:
                   aiGraph={aiGraphRef.current}
                   onEntitySelect={handleEntitySelect}
                 />
+              </TabsContent>
+              <TabsContent value="gaps">
+                <KnowledgeGapView
+                  entities={safeEntities}
+                  relationships={safeRelationships}
+                  onEntitySelect={handleEntitySelect}
+                />
+              </TabsContent>
+              <TabsContent value="quiz">
+                <QuizView entities={safeEntities} />
               </TabsContent>
             </Tabs>
           </TabsContent>
@@ -826,6 +866,8 @@ Instructions:
         onOpenChange={setDetailDialogOpen}
         onEntityClick={handleEntitySelect}
         onEntityUpdate={handleEntityUpdate}
+        isFavorite={!!selectedEntity && safeFavorites.includes(selectedEntity.id)}
+        onToggleFavorite={handleToggleFavorite}
       />
 
       <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />

@@ -133,3 +133,32 @@ export interface ChatMessage {
   sources?: Entity[];
   timestamp: string;
 }
+
+export interface ChatSession {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+  messages: ChatMessage[];
+}
+
+export interface QuizCard {
+  id: string;
+  entityId: string;
+  front: string;
+  back: string;
+  ease: number;        // 2.5 default, SM-2 ease factor
+  interval: number;    // days until next review
+  repetitions: number; // consecutive correct answers
+  nextReview: string;  // ISO date
+  lastReview?: string;
+}
+
+export interface KnowledgeGap {
+  type: 'orphan' | 'weak_link' | 'missing_relationship' | 'underdocumented';
+  severity: 'high' | 'medium' | 'low';
+  entityId?: string;
+  entityName?: string;
+  description: string;
+  suggestion: string;
+}
