@@ -1,7 +1,6 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import { useKV } from '@github/spark/hooks';
 import { Card } from '@/components/ui/card';
-import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Badge } from '@/components/ui/badge';
@@ -15,6 +14,195 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import type { ChatMessage, Entity } from '@/lib/types';
+
+/** Lightweight markdown renderer — no external deps needed */
+function MarkdownContent({ content }: { content: string }) {
+  const rendered = useMemo(() => {
+    const lines = content.split('\n');
+    const elements: React.ReactNode[] = [];
+    let inCodeBlock = false;
+    let codeBlockLang = '';
+    let codeBlockLines: string[] = [];
+    let listItems: { level: number; text: string; ordered: boolean; index: number }[] = [];
+    let key = 0;
+
+    const flushList = () => {
+      if (listItems.length === 0) return;
+      const items = listItems.map((item, i) => (
+        <li key={i} className="ml-4" style={{ marginLeft: `${item.level * 16}px` }}>
+          {renderInline(item.text)}
+        </li>
+      ));
+      const isOrdered = listItems[0].ordered;
+      if (isOrdered) {
+        elements.push(<ol key={key++} className="list-decimal list-inside space-y-1 my-2 text-sm">{items}</ol>);
+      } else {
+        elements.push(<ul key={key++} className="list-disc list-inside space-y-1 my-2 text-sm">{items}</ul>);
+      }
+      listItems = [];
+    };
+
+    const renderInline = (text: string): React.ReactNode => {
+      // Process inline markdown: bold, italic, code, links
+      const parts: React.ReactNode[] = [];
+      let remaining = text;
+      let inlineKey = 0;
+
+      while (remaining.length > 0) {
+        // Bold **text** or __text__
+        const boldMatch = remaining.match(/^(.*?)\*\*(.+?)\*\*/s) || remaining.match(/^(.*?)__(.+?)__/s);
+        // Inline code `text`
+        const codeMatch = remaining.match(/^(.*?)`([^`]+)`/);
+        // Italic *text* or _text_ (but not inside **)
+        const italicMatch = remaining.match(/^(.*?)(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/s) || remaining.match(/^(.*?)(?<!_)_(?!_)(.+?)(?<!_)_(?!_)/s);
+        // Link [text](url)
+        const linkMatch = remaining.match(/^(.*?)\[([^\]]+)\]\(([^)]+)\)/);
+
+        // Find the earliest match
+        type MatchInfo = { match: RegExpMatchArray; type: string; pos: number };
+        const candidates: MatchInfo[] = [];
+        if (boldMatch && boldMatch[1] !== undefined) candidates.push({ match: boldMatch, type: 'bold', pos: boldMatch[1].length });
+        if (codeMatch && codeMatch[1] !== undefined) candidates.push({ match: codeMatch, type: 'code', pos: codeMatch[1].length });
+        if (italicMatch && italicMatch[1] !== undefined) candidates.push({ match: italicMatch, type: 'italic', pos: italicMatch[1].length });
+        if (linkMatch && linkMatch[1] !== undefined) candidates.push({ match: linkMatch, type: 'link', pos: linkMatch[1].length });
+
+        if (candidates.length === 0) {
+          parts.push(remaining);
+          break;
+        }
+
+        candidates.sort((a, b) => a.pos - b.pos);
+        const best = candidates[0];
+
+        if (best.match[1]) {
+          parts.push(best.match[1]);
+        }
+
+        if (best.type === 'bold') {
+          parts.push(<strong key={inlineKey++} className="font-semibold text-foreground">{best.match[2]}</strong>);
+          remaining = remaining.slice(best.match[0].length);
+        } else if (best.type === 'code') {
+          parts.push(<code key={inlineKey++} className="px-1.5 py-0.5 rounded bg-secondary/60 text-primary font-mono text-xs">{best.match[2]}</code>);
+          remaining = remaining.slice(best.match[0].length);
+        } else if (best.type === 'italic') {
+          parts.push(<em key={inlineKey++} className="italic text-foreground/90">{best.match[2]}</em>);
+          remaining = remaining.slice(best.match[0].length);
+        } else if (best.type === 'link') {
+          parts.push(
+            <a key={inlineKey++} href={best.match[3]} target="_blank" rel="noopener noreferrer" className="text-primary underline hover:text-primary/80 transition-colors">
+              {best.match[2]}
+            </a>
+          );
+          remaining = remaining.slice(best.match[0].length);
+        }
+      }
+
+      return parts.length === 1 ? parts[0] : <>{parts}</>;
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+
+      // Code block toggle
+      if (line.trimStart().startsWith('```')) {
+        if (!inCodeBlock) {
+          flushList();
+          inCodeBlock = true;
+          codeBlockLang = line.trimStart().slice(3).trim();
+          codeBlockLines = [];
+          continue;
+        } else {
+          inCodeBlock = false;
+          elements.push(
+            <div key={key++} className="my-3 rounded-lg overflow-hidden border border-border/50">
+              {codeBlockLang && (
+                <div className="px-3 py-1.5 bg-secondary/60 text-xs text-muted-foreground font-mono border-b border-border/50">
+                  {codeBlockLang}
+                </div>
+              )}
+              <pre className="p-3 bg-secondary/30 overflow-x-auto">
+                <code className="text-xs font-mono text-foreground/90 leading-relaxed">{codeBlockLines.join('\n')}</code>
+              </pre>
+            </div>
+          );
+          codeBlockLang = '';
+          codeBlockLines = [];
+          continue;
+        }
+      }
+
+      if (inCodeBlock) {
+        codeBlockLines.push(line);
+        continue;
+      }
+
+      // Headings
+      const h3Match = line.match(/^###\s+(.+)/);
+      const h2Match = line.match(/^##\s+(.+)/);
+      const h1Match = line.match(/^#\s+(.+)/);
+      if (h3Match) { flushList(); elements.push(<h4 key={key++} className="text-sm font-semibold mt-4 mb-1.5 text-foreground">{renderInline(h3Match[1])}</h4>); continue; }
+      if (h2Match) { flushList(); elements.push(<h3 key={key++} className="text-base font-semibold mt-4 mb-2 text-foreground">{renderInline(h2Match[1])}</h3>); continue; }
+      if (h1Match) { flushList(); elements.push(<h2 key={key++} className="text-lg font-semibold mt-4 mb-2 text-foreground">{renderInline(h1Match[1])}</h2>); continue; }
+
+      // Horizontal rule
+      if (/^---+$/.test(line.trim()) || /^\*\*\*+$/.test(line.trim())) {
+        flushList();
+        elements.push(<hr key={key++} className="my-3 border-border/50" />);
+        continue;
+      }
+
+      // List items
+      const ulMatch = line.match(/^(\s*)[-*+]\s+(.+)/);
+      const olMatch = line.match(/^(\s*)(\d+)[.)]\s+(.+)/);
+      if (ulMatch) {
+        listItems.push({ level: Math.floor((ulMatch[1] || '').length / 2), text: ulMatch[2], ordered: false, index: 0 });
+        continue;
+      }
+      if (olMatch) {
+        listItems.push({ level: Math.floor((olMatch[1] || '').length / 2), text: olMatch[3], ordered: true, index: parseInt(olMatch[2]) });
+        continue;
+      }
+
+      // If we were in a list and hit a non-list line, flush
+      flushList();
+
+      // Blockquote
+      const bqMatch = line.match(/^>\s*(.*)/);
+      if (bqMatch) {
+        elements.push(
+          <blockquote key={key++} className="border-l-2 border-primary/50 pl-3 py-1 my-2 text-sm text-foreground/80 italic">
+            {renderInline(bqMatch[1])}
+          </blockquote>
+        );
+        continue;
+      }
+
+      // Empty line
+      if (line.trim() === '') {
+        continue;
+      }
+
+      // Regular paragraph
+      elements.push(<p key={key++} className="text-sm leading-relaxed my-1.5">{renderInline(line)}</p>);
+    }
+
+    // Flush remaining list items
+    flushList();
+
+    // Flush unclosed code block
+    if (inCodeBlock && codeBlockLines.length > 0) {
+      elements.push(
+        <pre key={key++} className="p-3 my-3 bg-secondary/30 rounded-lg overflow-x-auto border border-border/50">
+          <code className="text-xs font-mono text-foreground/90 leading-relaxed">{codeBlockLines.join('\n')}</code>
+        </pre>
+      );
+    }
+
+    return elements;
+  }, [content]);
+
+  return <div className="markdown-content">{rendered}</div>;
+}
 
 interface ChatViewProps {
   entities: Entity[];
@@ -315,7 +503,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
 
             <div>
               <Tabs value={selectedCategory} onValueChange={setSelectedCategory}>
-                <TabsList className="grid w-full grid-cols-5 mb-4">
+                <TabsList className="grid w-full grid-cols-3 sm:grid-cols-5 mb-4">
                   {promptCategories.map((category) => (
                     <TabsTrigger 
                       key={category.id} 
@@ -323,7 +511,8 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
                       className="gap-1.5 text-xs"
                     >
                       {category.icon}
-                      {category.label}
+                      <span className="hidden sm:inline">{category.label}</span>
+                      <span className="sm:hidden">{category.label.slice(0, 5)}</span>
                     </TabsTrigger>
                   ))}
                 </TabsList>
@@ -365,7 +554,11 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
                   ? 'bg-gradient-to-br from-primary/10 to-primary/5 border-primary/20' 
                   : 'bg-card/50 backdrop-blur border-border/50'
               }`}>
-                <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                {message.role === 'user' ? (
+                  <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
+                ) : (
+                  <MarkdownContent content={message.content} />
+                )}
                 {message.sources && message.sources.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-border/50">
                     <p className="text-xs text-muted-foreground mb-2 font-medium">Sources:</p>
@@ -412,13 +605,26 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
 
       <div className="space-y-2">
         <div className="flex gap-2">
-          <Input
+          <textarea
             placeholder="Ask about ICT concepts, filter trades, analyze patterns..."
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSubmit()}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !e.shiftKey) {
+                e.preventDefault();
+                handleSubmit();
+              }
+            }}
             disabled={isLoading}
-            className="flex-1"
+            rows={1}
+            className="flex-1 min-h-[40px] max-h-[120px] resize-none rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+            style={{ height: 'auto', minHeight: '40px' }}
+            ref={(el) => {
+              if (el) {
+                el.style.height = 'auto';
+                el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+              }
+            }}
           />
           <Button onClick={handleSubmit} disabled={!input.trim() || isLoading} className="gap-2">
             <PaperPlaneRight size={16} weight="bold" />
