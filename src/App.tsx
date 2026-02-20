@@ -3,7 +3,7 @@ import { useKV } from '@/hooks/use-kv';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
-import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, Sparkle, MagicWand, Lightning, ChartLine, BookOpenText, GithubLogo, ArrowSquareOut } from '@phosphor-icons/react';
+import { Database, Tree, Upload, ChatsCircle, Graph, Brain, GraduationCap, Sparkle, MagicWand, Lightning, ChartLine, BookOpenText, GithubLogo, ArrowSquareOut, GearSix, Warning } from '@phosphor-icons/react';
 import { DashboardView } from '@/components/DashboardView';
 import { ExplorerView } from '@/components/ExplorerView';
 import { UploadView } from '@/components/UploadView';
@@ -17,9 +17,11 @@ import { SkillsView } from '@/components/SkillsView';
 import { AnalyticsView } from '@/components/AnalyticsView';
 import { ResearchView } from '@/components/ResearchView';
 import { EntityDetailDialog } from '@/components/EntityDetailDialog';
+import { SettingsDialog } from '@/components/SettingsDialog';
 import { processFile } from '@/lib/ai-processor';
 import { generateDemoData } from '@/lib/demo-data';
 import { createAIGraphInternal } from '@/lib/schema';
+import { isLLMConfigured } from '@/lib/llm-client';
 import type { Entity, Relationship, Upload as UploadType, FileProcessingLog, DatabaseStats, DomainType, EntityType } from '@/lib/types';
 
 function App() {
@@ -32,6 +34,7 @@ function App() {
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
   const [detailDialogOpen, setDetailDialogOpen] = useState(false);
   const [activeTab, setActiveTab] = useState('dashboard');
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   const aiGraphRef = useRef(createAIGraphInternal());
   const sessionIdRef = useRef(`session-${Date.now()}`);
@@ -479,10 +482,32 @@ Instructions:
               >
                 <GithubLogo size={20} weight="duotone" />
               </a>
+              <button
+                onClick={() => setSettingsOpen(true)}
+                className="p-2 rounded-lg hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground"
+                title="Settings"
+              >
+                <GearSix size={20} weight="duotone" />
+              </button>
             </div>
           </div>
         </div>
       </header>
+
+      {!isLLMConfigured() && (
+        <div className="bg-yellow-500/10 border-b border-yellow-500/30 px-6 py-2">
+          <div className="container mx-auto flex items-center gap-2 text-xs text-yellow-400">
+            <Warning size={14} weight="fill" />
+            <span>AI features require an API key.</span>
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="underline hover:text-yellow-300 transition-colors"
+            >
+              Configure in Settings
+            </button>
+          </div>
+        </div>
+      )}
 
       <main className="container mx-auto px-6 py-6 flex-1">
         <Tabs value={activeTab} onValueChange={setActiveTab}>
@@ -674,6 +699,8 @@ Instructions:
         onOpenChange={setDetailDialogOpen}
         onEntityClick={handleEntitySelect}
       />
+
+      <SettingsDialog open={settingsOpen} onOpenChange={setSettingsOpen} />
 
       <Toaster position="top-right" />
     </div>
