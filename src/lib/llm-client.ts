@@ -1,132 +1,377 @@
 /**
- * Spark LLM API replacement.
- * 
- * Provides a drop-in replacement for window.spark.llmPrompt and window.spark.llm.
- * 
- * When an API key is configured (via localStorage "ict-llm-api-key"), it calls
- * the OpenAI-compatible chat completions endpoint. Otherwise, it returns a
- * graceful "no API key configured" message so the app doesn't crash.
- * 
- * The base URL can also be configured via localStorage "ict-llm-base-url" to
- * support OpenRouter, local models, etc.
+ * Multi-provider LLM client.
+ *
+ * Supports: OpenAI, Anthropic, Google Gemini, MiniMax, and Ollama (local).
+ * Also provides a window.spark shim for legacy code that uses
+ * window.spark.llmPrompt / window.spark.llm.
  */
 
-const LLM_API_KEY_STORAGE = 'ict-llm-api-key';
-const LLM_BASE_URL_STORAGE = 'ict-llm-base-url';
-const DEFAULT_BASE_URL = 'https://api.openai.com/v1';
+export type ProviderType = 'openai' | 'anthropic' | 'gemini' | 'minimax' | 'ollama';
 
-export function getApiKey(): string | null {
-  return localStorage.getItem(LLM_API_KEY_STORAGE);
+const SYSTEM_PROMPT =
+  'You are an expert on ICT (Inner Circle Trader) trading methodology. Be precise, technical, and reference specific ICT concepts.';
+
+// ---------------------------------------------------------------------------
+// Storage keys
+// ---------------------------------------------------------------------------
+const STORAGE_PROVIDER    = 'ict-llm-provider';
+const STORAGE_KEY_PREFIX  = 'ict-llm-key-';
+const STORAGE_MODEL_PREFIX = 'ict-llm-model-';
+const STORAGE_OLLAMA_URL  = 'ict-llm-ollama-url';
+
+// ---------------------------------------------------------------------------
+// Provider metadata
+// ---------------------------------------------------------------------------
+export interface ModelOption { value: string; label: string }
+
+export interface ProviderConfig {
+  id: ProviderType;
+  name: string;
+  defaultBaseUrl: string;
+  defaultModel: string;
+  models: ModelOption[];
+  requiresApiKey: boolean;
+  showBaseUrl: boolean;
+  apiKeyPlaceholder: string;
+  apiKeyHint: string;
+  docsUrl: string;
 }
 
-export function setApiKey(key: string): void {
-  localStorage.setItem(LLM_API_KEY_STORAGE, key);
+export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
+  openai: {
+    id: 'openai',
+    name: 'OpenAI',
+    defaultBaseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4o',
+    models: [
+      { value: 'gpt-4o',       label: 'GPT-4o' },
+      { value: 'gpt-4o-mini',  label: 'GPT-4o Mini' },
+      { value: 'gpt-4-turbo',  label: 'GPT-4 Turbo' },
+      { value: 'o1-mini',      label: 'o1 Mini' },
+      { value: 'o3-mini',      label: 'o3 Mini' },
+    ],
+    requiresApiKey: true,
+    showBaseUrl: false,
+    apiKeyPlaceholder: 'sk-...',
+    apiKeyHint: 'Get your key at platform.openai.com',
+    docsUrl: 'https://platform.openai.com/api-keys',
+  },
+
+  anthropic: {
+    id: 'anthropic',
+    name: 'Anthropic',
+    defaultBaseUrl: 'https://api.anthropic.com/v1',
+    defaultModel: 'claude-3-5-sonnet-20241022',
+    models: [
+      { value: 'claude-3-5-sonnet-20241022', label: 'Claude 3.5 Sonnet' },
+      { value: 'claude-3-5-haiku-20241022',  label: 'Claude 3.5 Haiku' },
+      { value: 'claude-3-opus-20240229',     label: 'Claude 3 Opus' },
+      { value: 'claude-3-haiku-20240307',    label: 'Claude 3 Haiku' },
+    ],
+    requiresApiKey: true,
+    showBaseUrl: false,
+    apiKeyPlaceholder: 'sk-ant-...',
+    apiKeyHint: 'Get your key at console.anthropic.com',
+    docsUrl: 'https://console.anthropic.com/settings/keys',
+  },
+
+  gemini: {
+    id: 'gemini',
+    name: 'Google Gemini',
+    defaultBaseUrl: 'https://generativelanguage.googleapis.com/v1beta',
+    defaultModel: 'gemini-2.0-flash',
+    models: [
+      { value: 'gemini-2.0-flash',     label: 'Gemini 2.0 Flash' },
+      { value: 'gemini-1.5-pro',       label: 'Gemini 1.5 Pro' },
+      { value: 'gemini-1.5-flash',     label: 'Gemini 1.5 Flash' },
+      { value: 'gemini-1.5-flash-8b',  label: 'Gemini 1.5 Flash 8B' },
+    ],
+    requiresApiKey: true,
+    showBaseUrl: false,
+    apiKeyPlaceholder: 'AIza...',
+    apiKeyHint: 'Get your key at aistudio.google.com',
+    docsUrl: 'https://aistudio.google.com/app/apikey',
+  },
+
+  minimax: {
+    id: 'minimax',
+    name: 'MiniMax',
+    defaultBaseUrl: 'https://api.minimax.io/v1',
+    defaultModel: 'MiniMax-M2.5',
+    models: [
+      { value: 'MiniMax-M2.5',     label: 'MiniMax M2.5' },
+      { value: 'MiniMax-M1',       label: 'MiniMax M1' },
+      { value: 'MiniMax-Text-01',  label: 'MiniMax Text-01' },
+    ],
+    requiresApiKey: true,
+    showBaseUrl: false,
+    apiKeyPlaceholder: 'eyJ...',
+    apiKeyHint: 'Get your key at platform.minimax.io',
+    docsUrl: 'https://platform.minimax.io/user-center/basic-information/interface-key',
+  },
+
+  ollama: {
+    id: 'ollama',
+    name: 'Ollama',
+    defaultBaseUrl: 'http://localhost:11434/v1',
+    defaultModel: 'llama3.2',
+    models: [
+      { value: 'llama3.2',          label: 'Llama 3.2 (3B)' },
+      { value: 'llama3.2:1b',       label: 'Llama 3.2 (1B)' },
+      { value: 'llama3.1',          label: 'Llama 3.1 (8B)' },
+      { value: 'llama3.1:70b',      label: 'Llama 3.1 (70B)' },
+      { value: 'mistral',           label: 'Mistral 7B' },
+      { value: 'mixtral',           label: 'Mixtral 8x7B' },
+      { value: 'deepseek-r1',       label: 'DeepSeek R1' },
+      { value: 'phi4',              label: 'Phi-4' },
+      { value: 'qwen2.5',           label: 'Qwen 2.5' },
+    ],
+    requiresApiKey: false,
+    showBaseUrl: true,
+    apiKeyPlaceholder: '',
+    apiKeyHint: 'Ollama runs locally — no API key required.',
+    docsUrl: 'https://ollama.com',
+  },
+};
+
+// ---------------------------------------------------------------------------
+// Storage helpers
+// ---------------------------------------------------------------------------
+export function getActiveProvider(): ProviderType {
+  const stored = localStorage.getItem(STORAGE_PROVIDER);
+  if (stored && stored in PROVIDERS) return stored as ProviderType;
+  // Migrate: if old single-key exists, assume openai
+  if (localStorage.getItem('ict-llm-api-key')) return 'openai';
+  return 'openai';
 }
 
-export function removeApiKey(): void {
-  localStorage.removeItem(LLM_API_KEY_STORAGE);
+export function setActiveProvider(provider: ProviderType): void {
+  localStorage.setItem(STORAGE_PROVIDER, provider);
 }
 
-export function getBaseUrl(): string {
-  return localStorage.getItem(LLM_BASE_URL_STORAGE) || DEFAULT_BASE_URL;
+export function getProviderApiKey(provider: ProviderType): string | null {
+  const key = localStorage.getItem(STORAGE_KEY_PREFIX + provider);
+  if (key) return key;
+  // Migrate legacy openai key
+  if (provider === 'openai') {
+    const legacy = localStorage.getItem('ict-llm-api-key');
+    if (legacy) {
+      localStorage.setItem(STORAGE_KEY_PREFIX + 'openai', legacy);
+      localStorage.removeItem('ict-llm-api-key');
+      return legacy;
+    }
+  }
+  return null;
 }
 
-export function setBaseUrl(url: string): void {
-  localStorage.setItem(LLM_BASE_URL_STORAGE, url);
+export function setProviderApiKey(provider: ProviderType, key: string): void {
+  localStorage.setItem(STORAGE_KEY_PREFIX + provider, key);
+}
+
+export function removeProviderApiKey(provider: ProviderType): void {
+  localStorage.removeItem(STORAGE_KEY_PREFIX + provider);
+}
+
+export function getProviderModel(provider: ProviderType): string {
+  return (
+    localStorage.getItem(STORAGE_MODEL_PREFIX + provider) ||
+    PROVIDERS[provider].defaultModel
+  );
+}
+
+export function setProviderModel(provider: ProviderType, model: string): void {
+  localStorage.setItem(STORAGE_MODEL_PREFIX + provider, model);
+}
+
+export function getOllamaUrl(): string {
+  return localStorage.getItem(STORAGE_OLLAMA_URL) || PROVIDERS.ollama.defaultBaseUrl;
+}
+
+export function setOllamaUrl(url: string): void {
+  localStorage.setItem(STORAGE_OLLAMA_URL, url);
 }
 
 export function isLLMConfigured(): boolean {
-  return !!getApiKey();
+  const provider = getActiveProvider();
+  if (provider === 'ollama') return true;
+  return !!getProviderApiKey(provider);
 }
 
-/**
- * Tagged template literal replacement for window.spark.llmPrompt.
- * Joins template strings and interpolated values into a single prompt string.
- */
-export function llmPrompt(strings: TemplateStringsArray | string[], ...values: any[]): string {
+// ---------------------------------------------------------------------------
+// Legacy shim (backward compat — used by App.tsx spark references)
+// ---------------------------------------------------------------------------
+export function getApiKey(): string | null { return getProviderApiKey(getActiveProvider()); }
+export function setApiKey(key: string): void { setProviderApiKey(getActiveProvider(), key); }
+export function removeApiKey(): void { removeProviderApiKey(getActiveProvider()); }
+export function getBaseUrl(): string {
+  const p = getActiveProvider();
+  if (p === 'ollama') return getOllamaUrl();
+  return PROVIDERS[p].defaultBaseUrl;
+}
+export function setBaseUrl(url: string): void {
+  if (getActiveProvider() === 'ollama') setOllamaUrl(url);
+}
+
+// ---------------------------------------------------------------------------
+// llmPrompt — tagged template literal helper
+// ---------------------------------------------------------------------------
+export function llmPrompt(strings: TemplateStringsArray | string[], ...values: unknown[]): string {
   let result = '';
   for (let i = 0; i < strings.length; i++) {
     result += strings[i];
-    if (i < values.length) {
-      result += String(values[i]);
-    }
+    if (i < values.length) result += String(values[i]);
   }
   return result;
 }
 
-/**
- * Drop-in replacement for window.spark.llm.
- * Calls an OpenAI-compatible chat completions API.
- * 
- * @param prompt - The prompt string (from llmPrompt)
- * @param model - Model name (default: gpt-4o)
- * @param jsonMode - Whether to request JSON output
- */
+// ---------------------------------------------------------------------------
+// Per-provider fetch implementations
+// ---------------------------------------------------------------------------
+async function callOpenAICompatible(
+  promptStr: string,
+  model: string,
+  baseUrl: string,
+  apiKey: string,
+  jsonMode: boolean,
+): Promise<string> {
+  const response = await fetch(`${baseUrl}/chat/completions`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'Authorization': `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        { role: 'user',   content: promptStr },
+      ],
+      ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
+      temperature: 0.7,
+      max_tokens: 4096,
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`API error ${response.status}: ${err.slice(0, 200)}`);
+  }
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || 'No response generated.';
+}
+
+async function callAnthropic(
+  promptStr: string,
+  model: string,
+  apiKey: string,
+  jsonMode: boolean,
+): Promise<string> {
+  const systemContent = SYSTEM_PROMPT + (jsonMode ? ' Always respond with valid JSON.' : '');
+  const response = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'content-type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model,
+      max_tokens: 4096,
+      system: systemContent,
+      messages: [{ role: 'user', content: promptStr }],
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Anthropic API ${response.status}: ${err.slice(0, 200)}`);
+  }
+  const data = await response.json();
+  return data.content?.[0]?.text || 'No response generated.';
+}
+
+async function callGemini(
+  promptStr: string,
+  model: string,
+  apiKey: string,
+  jsonMode: boolean,
+): Promise<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
+  const systemText = SYSTEM_PROMPT + (jsonMode ? ' Always respond with valid JSON.' : '');
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      system_instruction: { parts: [{ text: systemText }] },
+      contents: [{ role: 'user', parts: [{ text: promptStr }] }],
+      generationConfig: {
+        maxOutputTokens: 4096,
+        temperature: 0.7,
+        ...(jsonMode ? { responseMimeType: 'application/json' } : {}),
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const err = await response.text();
+    throw new Error(`Gemini API ${response.status}: ${err.slice(0, 200)}`);
+  }
+  const data = await response.json();
+  return data.candidates?.[0]?.content?.parts?.[0]?.text || 'No response generated.';
+}
+
+// ---------------------------------------------------------------------------
+// Main llm() function
+// ---------------------------------------------------------------------------
 export async function llm(
   prompt: string | string[],
-  model: string = 'gpt-4o',
-  jsonMode: boolean = false
+  _model?: string,
+  jsonMode = false,
 ): Promise<string> {
-  const apiKey = getApiKey();
-  const baseUrl = getBaseUrl();
-
-  // If prompt is an array (legacy Spark format), join it
+  const provider = getActiveProvider();
+  const apiKey   = getProviderApiKey(provider);
+  const model    = getProviderModel(provider);
   const promptStr = Array.isArray(prompt) ? prompt.join('') : prompt;
 
-  if (!apiKey) {
+  if (provider !== 'ollama' && !apiKey) {
     return jsonMode
-      ? JSON.stringify({ error: 'No API key configured. Go to Settings to add your OpenAI API key.' })
-      : 'AI features require an API key. Open the Settings panel (gear icon in the header) to configure your OpenAI API key. You can also use OpenRouter or any OpenAI-compatible endpoint.';
+      ? JSON.stringify({ error: 'No API key configured. Open Settings to configure your AI provider.' })
+      : 'AI features require an API key. Open Settings (gear icon) to configure your AI provider.';
   }
 
   try {
-    const response = await fetch(`${baseUrl}/chat/completions`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': `Bearer ${apiKey}`,
-      },
-      body: JSON.stringify({
-        model,
-        messages: [
-          {
-            role: 'system',
-            content: 'You are an expert on ICT (Inner Circle Trader) trading methodology. Be precise, technical, and reference specific ICT concepts.',
-          },
-          {
-            role: 'user',
-            content: promptStr,
-          },
-        ],
-        ...(jsonMode ? { response_format: { type: 'json_object' } } : {}),
-        temperature: 0.7,
-        max_tokens: 4096,
-      }),
-    });
+    switch (provider) {
+      case 'anthropic':
+        return await callAnthropic(promptStr, model, apiKey!, jsonMode);
 
-    if (!response.ok) {
-      const errorBody = await response.text();
-      console.error('[LLM] API error:', response.status, errorBody);
-      throw new Error(`API error ${response.status}: ${errorBody.slice(0, 200)}`);
+      case 'gemini':
+        return await callGemini(promptStr, model, apiKey!, jsonMode);
+
+      case 'openai':
+      case 'minimax': {
+        const baseUrl = PROVIDERS[provider].defaultBaseUrl;
+        return await callOpenAICompatible(promptStr, model, baseUrl, apiKey!, jsonMode);
+      }
+
+      case 'ollama': {
+        const baseUrl = getOllamaUrl();
+        return await callOpenAICompatible(promptStr, model, baseUrl, 'ollama', jsonMode);
+      }
     }
-
-    const data = await response.json();
-    return data.choices?.[0]?.message?.content || 'No response generated.';
   } catch (error) {
     console.error('[LLM] Request failed:', error);
     if (error instanceof TypeError && error.message.includes('fetch')) {
       return jsonMode
-        ? JSON.stringify({ error: 'Network error — check your internet connection.' })
-        : 'Network error — unable to reach the LLM API. Check your internet connection and API endpoint configuration.';
+        ? JSON.stringify({ error: 'Network error — check your connection and endpoint.' })
+        : 'Network error — unable to reach the LLM API. Check your connection and endpoint in Settings.';
     }
     throw error;
   }
 }
 
-/**
- * Initialize the window.spark shim so existing code that uses
- * window.spark.llmPrompt and window.spark.llm continues to work.
- */
+// ---------------------------------------------------------------------------
+// window.spark shim
+// ---------------------------------------------------------------------------
 export function initSparkShim(): void {
   (window as any).spark = {
     llmPrompt,
@@ -136,9 +381,7 @@ export function initSparkShim(): void {
         const keys: string[] = [];
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
-          if (key?.startsWith('ict-kv:')) {
-            keys.push(key.slice(7));
-          }
+          if (key?.startsWith('ict-kv:')) keys.push(key.slice(7));
         }
         return keys;
       },
@@ -146,9 +389,7 @@ export function initSparkShim(): void {
         try {
           const raw = localStorage.getItem('ict-kv:' + key);
           return raw ? JSON.parse(raw) : undefined;
-        } catch {
-          return undefined;
-        }
+        } catch { return undefined; }
       },
       set: async <T,>(key: string, value: T): Promise<void> => {
         localStorage.setItem('ict-kv:' + key, JSON.stringify(value));
