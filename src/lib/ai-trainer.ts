@@ -1,5 +1,5 @@
 import type { Entity, Relationship } from './types';
-import { useKV } from '@github/spark/hooks';
+import { useKV } from '@/hooks/use-kv';
 
 export interface TrainingPattern {
   id: string;

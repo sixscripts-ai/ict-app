@@ -1,16 +1,17 @@
 /// <reference types="vite/client" />
-declare const GITHUB_RUNTIME_PERMANENT_NAME: string
-declare const BASE_KV_SERVICE_URL: string
-
-interface SparkAPI {
-  llmPrompt(strings: TemplateStringsArray, ...values: any[]): string[];
-  llm(prompt: string[], model?: string, json?: boolean): Promise<string>;
-}
-
-declare const spark: SparkAPI;
 
 interface Window {
-  spark: SparkAPI;
+  spark: {
+    llmPrompt(strings: TemplateStringsArray | string[], ...values: any[]): string;
+    llm(prompt: string | string[], model?: string, jsonMode?: boolean): Promise<string>;
+    kv: {
+      keys(): Promise<string[]>;
+      get<T>(key: string): Promise<T | undefined>;
+      set<T>(key: string, value: T): Promise<void>;
+      delete(key: string): Promise<void>;
+    };
+    user(): Promise<{ login: string }>;
+  };
 }
 
 declare module 'jspdf' {

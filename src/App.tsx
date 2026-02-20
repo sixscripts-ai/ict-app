@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useKV } from '@github/spark/hooks';
+import { useKV } from '@/hooks/use-kv';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Toaster } from '@/components/ui/sonner';
 import { toast } from 'sonner';
@@ -471,7 +471,7 @@ Instructions:
                 </div>
               )}
               <a
-                href="https://github.com/sixscriptssoftware/ict-knowledge-engine"
+                href="https://github.com/sixscripts-ai/ict-app"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="p-2 rounded-lg hover:bg-secondary/50 transition-colors text-muted-foreground hover:text-foreground"
@@ -652,7 +652,7 @@ Instructions:
                 <ArrowSquareOut size={12} />
               </a>
               <a 
-                href="https://github.com/sixscriptssoftware/ict-knowledge-engine"
+                href="https://github.com/sixscripts-ai/ict-app"
                 target="_blank" 
                 rel="noopener noreferrer"
                 className="flex items-center gap-1 hover:text-primary transition-colors"

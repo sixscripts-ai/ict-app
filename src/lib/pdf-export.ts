@@ -29,13 +29,13 @@ interface TradeMetrics {
 }
 
 const COLORS = {
-  primary: [116, 195, 143],
-  accent: [105, 180, 201],
-  text: [229, 229, 229],
-  textMuted: [166, 166, 166],
-  background: [26, 26, 46],
-  card: [51, 51, 67],
-  border: [89, 89, 106]
+  primary: [116, 195, 143] as const,
+  accent: [105, 180, 201] as const,
+  text: [229, 229, 229] as const,
+  textMuted: [166, 166, 166] as const,
+  background: [26, 26, 46] as const,
+  card: [51, 51, 67] as const,
+  border: [89, 89, 106] as const,
 };
 
 export class PDFExporter {
@@ -99,7 +99,7 @@ export class PDFExporter {
 
     this.pdf.setFontSize(16);
     if (isPositive !== undefined) {
-      this.pdf.setTextColor(...(isPositive ? COLORS.primary : [255, 99, 102]));
+      this.pdf.setTextColor(...(isPositive ? COLORS.primary : [255, 99, 102]) as [number, number, number]);
     } else {
       this.pdf.setTextColor(...COLORS.text);
     }
@@ -407,7 +407,7 @@ export class PDFExporter {
       this.currentY += 5;
 
       const isWin = result === 'WIN';
-      this.pdf.setTextColor(...(isWin ? COLORS.primary : [255, 99, 102]));
+      this.pdf.setTextColor(...(isWin ? COLORS.primary : [255, 99, 102]) as [number, number, number]);
       this.pdf.text(`Result: ${result}  |  P&L: $${pnl.toFixed(2)}  |  R:R: ${rr.toFixed(2)}`, this.margin + 5, this.currentY);
       this.currentY += 8;
     });

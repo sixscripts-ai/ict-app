@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
-  "homepage": "https://ict-knowledge-engine--sixscriptssoftware.github.app/",
+  "homepage": "https://github.com/sixscripts-ai/ict-app",
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
@@ -11,8 +11,8 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@github/spark": "file:./packages/spark-tools",
     "@phosphor-icons/react": "^2.1.7",
+    "@radix-ui/colors": "^3.0.0",
     "@radix-ui/react-accordion": "^1.2.2",
     "@radix-ui/react-alert-dialog": "^1.1.4",
     "@radix-ui/react-aspect-ratio": "^1.1.1",
@@ -40,7 +40,9 @@
     "@radix-ui/react-toggle": "^1.1.1",
     "@radix-ui/react-toggle-group": "^1.1.1",
     "@radix-ui/react-tooltip": "^1.1.6",
+    "@tailwindcss/vite": "^4.1.18",
     "@types/d3": "^7.4.3",
+    "@vitejs/plugin-react-swc": "^4.2.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.0.4",
@@ -51,6 +53,9 @@
     "html2canvas": "^1.4.1",
     "input-otp": "^1.4.1",
     "jspdf": "^4.2.0",
+    "lucide-react": "^0.564.0",
+    "magic-string": "^0.30.21",
+    "next-themes": "^0.4.6",
     "react": "^18.3.1",
     "react-day-picker": "^9.4.4",
     "react-dom": "^18.3.1",
