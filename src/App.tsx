@@ -46,8 +46,7 @@ function App() {
   const [entities, setEntities] = useKV<Entity[]>('ict-entities', []);
   const [relationships, setRelationships] = useKV<Relationship[]>('ict-relationships', []);
   const [uploads, setUploads] = useKV<UploadType[]>('ict-uploads', []);
-  const [logs] = useKV<FileProcessingLog[]>('ict-logs', []);
-  const [chatMessages] = useKV<import('@/lib/types').ChatMessage[]>('chat-history', []);
+  const [logs, setLogs] = useKV<FileProcessingLog[]>('ict-logs', []);
   const [favorites, setFavorites] = useKV<string[]>('favorites', []);
 
   const [selectedEntity, setSelectedEntity] = useState<Entity | null>(null);
@@ -66,7 +65,6 @@ function App() {
   const safeRelationships = useMemo(() => relationships || [], [relationships]);
   const safeUploads = useMemo(() => uploads || [], [uploads]);
   const safeLogs = useMemo(() => logs || [], [logs]);
-  const safeChatMessages = useMemo(() => chatMessages || [], [chatMessages]);
   const safeFavorites = useMemo(() => favorites || [], [favorites]);
 
   // Auto-load ICT knowledge base on first visit
@@ -433,11 +431,11 @@ function App() {
     });
   };
 
-  const handleAskQuestion = async (question: string): Promise<{ answer: string; sources: Entity[] }> => {
+  const handleAskQuestion = async (question: string, history: import('@/lib/types').ChatMessage[] = []): Promise<{ answer: string; sources: Entity[] }> => {
     const sessionId = sessionIdRef.current;
     const aiGraph = aiGraphRef.current;
 
-    aiGraph.createOrUpdateSession(sessionId, safeChatMessages, safeEntities);
+    aiGraph.createOrUpdateSession(sessionId, history, safeEntities);
     const session = aiGraph.getSession(sessionId);
 
     if (session) {
@@ -445,7 +443,7 @@ function App() {
     }
 
     const semanticResults = await aiGraph.semanticSearch(question, 20);
-    const response = await aiGraph.query(question, session);
+    // const response = await aiGraph.query(question, session);
 
     const conceptEntities = semanticResults
       .filter(r => r.node.type === 'concept' && r.similarity > 0.5)
@@ -496,9 +494,16 @@ function App() {
       relevantEntityIds.has(r.sourceId) || relevantEntityIds.has(r.targetId)
     ).slice(0, 30);
 
-    const prompt = window.spark.llmPrompt`You are an ICT (Inner Circle Trader) methodology expert. Answer technical questions with precision and depth using semantic search results.
+    const prompt = window.spark.llmPrompt`You are an expert on Standard ICT (Inner Circle Trader) methodology. Answer technical questions with precision and depth using semantic search results.
 
 Question: ${question}
+
+Instructions for Context Usage:
+1. **Prioritize the "Semantically Relevant Knowledge" provided below.** This is your primary source of truth.
+2. If the answer is found in the context, cite the specific Entity Name.
+3. If the context does NOT contain the answer, you may use your general knowledge of ICT methodology, but you MUST preface it with: "**Note:** This answer is based on general ICT knowledge, not the specific context provided."
+4. **Acronyms:** Standard ICT acronyms (e.g., FVG, OB, CBDR, OTE) are expected. Do not invent new acronyms. If an acronym is ambiguous, ask for clarification.
+5. **Definitions:** Use strict ICT definitions.
 
 Semantically Relevant Knowledge (sorted by similarity):
 
@@ -658,7 +663,7 @@ Instructions:
       )}
 
       <main className="container mx-auto px-6 py-6 flex-1">
-        <Tabs value={activeTab} onValueChange={setActiveTab}>
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="flex-1 flex flex-col h-full overflow-hidden">
           <div className="overflow-x-auto -mx-6 px-6 pb-2">
             <TabsList className="mb-6 inline-flex w-max">
               <TabsTrigger value="dashboard" className="gap-2">
@@ -688,18 +693,18 @@ Instructions:
             </TabsList>
           </div>
 
-          <TabsContent value="dashboard">
+          <TabsContent value="dashboard" className="h-full overflow-y-auto">
             <DashboardView stats={stats} onNavigate={handleNavigate} entities={safeEntities} relationships={safeRelationships} favorites={safeFavorites} onToggleFavorite={handleToggleFavorite} onEntitySelect={handleEntitySelect} />
           </TabsContent>
 
-          <TabsContent value="knowledge">
+          <TabsContent value="knowledge" className="h-full flex flex-col overflow-hidden">
             <Suspense fallback={<LoadingFallback />}>
               <KnowledgeBaseView />
             </Suspense>
           </TabsContent>
 
-          <TabsContent value="explore">
-            <Tabs value={exploreTab} onValueChange={setExploreTab}>
+          <TabsContent value="explore" className="h-full flex flex-col overflow-hidden">
+            <Tabs value={exploreTab} onValueChange={setExploreTab} className="h-full flex flex-col">
               <TabsList className="mb-4">
                 <TabsTrigger value="explorer" className="gap-2">
                   <Tree size={14} />
@@ -714,7 +719,7 @@ Instructions:
                   Search
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="explorer">
+              <TabsContent value="explorer" className="h-full overflow-hidden">
                 <ExplorerView
                   entities={safeEntities}
                   relationships={safeRelationships}
@@ -725,7 +730,7 @@ Instructions:
                   onToggleFavorite={handleToggleFavorite}
                 />
               </TabsContent>
-              <TabsContent value="graph">
+              <TabsContent value="graph" className="h-full overflow-hidden">
                 <Suspense fallback={<LoadingFallback />}>
                   <GraphView
                     entities={safeEntities}
@@ -734,7 +739,7 @@ Instructions:
                   />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="search">
+              <TabsContent value="search" className="h-full overflow-y-auto pr-4">
                 <Suspense fallback={<LoadingFallback />}>
                   <SemanticSearchView
                     entities={safeEntities}
@@ -746,8 +751,8 @@ Instructions:
             </Tabs>
           </TabsContent>
 
-          <TabsContent value="analytics">
-            <Tabs value={analyticsTab} onValueChange={setAnalyticsTab}>
+          <TabsContent value="analytics" className="h-full flex flex-col overflow-hidden">
+            <Tabs value={analyticsTab} onValueChange={setAnalyticsTab} className="h-full flex flex-col">
               <TabsList className="mb-4">
                 <TabsTrigger value="analytics" className="gap-2">
                   <ChartLine size={14} />
@@ -778,12 +783,12 @@ Instructions:
                   Quiz
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="analytics">
+              <TabsContent value="analytics" className="h-full overflow-y-auto pr-4">
                 <Suspense fallback={<LoadingFallback />}>
                   <AnalyticsView entities={safeEntities} />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="training">
+              <TabsContent value="training" className="h-full overflow-y-auto pr-4">
                 <Suspense fallback={<LoadingFallback />}>
                   <TrainingView
                     entities={safeEntities}
@@ -792,7 +797,7 @@ Instructions:
                   />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="patterns">
+              <TabsContent value="patterns" className="h-full overflow-y-auto pr-4">
                 <Suspense fallback={<LoadingFallback />}>
                   <PatternsView
                     entities={safeEntities}
@@ -801,7 +806,7 @@ Instructions:
                   />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="recommendations">
+              <TabsContent value="recommendations" className="h-full overflow-y-auto pr-4">
                 <Suspense fallback={<LoadingFallback />}>
                   <RecommendationsView
                     entities={safeEntities}
@@ -811,7 +816,7 @@ Instructions:
                   />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="skills">
+              <TabsContent value="skills" className="h-full overflow-y-auto pr-4">
                 <Suspense fallback={<LoadingFallback />}>
                   <SkillsView
                     entities={safeEntities}
@@ -821,7 +826,7 @@ Instructions:
                   />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="gaps">
+              <TabsContent value="gaps" className="h-full overflow-y-auto pr-4">
                 <Suspense fallback={<LoadingFallback />}>
                   <KnowledgeGapView
                     entities={safeEntities}
@@ -830,7 +835,7 @@ Instructions:
                   />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="quiz">
+              <TabsContent value="quiz" className="h-full overflow-y-auto pr-4">
                 <Suspense fallback={<LoadingFallback />}>
                   <QuizView entities={safeEntities} />
                 </Suspense>
@@ -838,8 +843,8 @@ Instructions:
             </Tabs>
           </TabsContent>
 
-          <TabsContent value="research">
-            <Tabs value={researchTab} onValueChange={setResearchTab}>
+          <TabsContent value="research" className="h-full flex flex-col overflow-hidden">
+            <Tabs value={researchTab} onValueChange={setResearchTab} className="h-full flex flex-col">
               <TabsList className="mb-4">
                 <TabsTrigger value="research" className="gap-2">
                   <BookOpenText size={14} />
@@ -850,12 +855,12 @@ Instructions:
                   Upload
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="research">
+              <TabsContent value="research" className="h-full overflow-y-auto pr-4">
                 <Suspense fallback={<LoadingFallback />}>
                   <ResearchView />
                 </Suspense>
               </TabsContent>
-              <TabsContent value="upload">
+              <TabsContent value="upload" className="h-full overflow-y-auto pr-4">
                 <UploadView
                   uploads={safeUploads}
                   logs={safeLogs}
@@ -867,7 +872,7 @@ Instructions:
             </Tabs>
           </TabsContent>
 
-          <TabsContent value="chat">
+          <TabsContent value="chat" className="h-full flex flex-col overflow-hidden">
             <Suspense fallback={<LoadingFallback />}>
               <ChatView
                 entities={safeEntities}

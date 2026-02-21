@@ -25,5 +25,15 @@ export default defineConfig({
   },
   optimizeDeps: {
     include: ['react', 'react-dom']
-  }
+  },
+  server: {
+    cors: true,
+    proxy: {
+      '/api/minimax': {
+        target: 'https://api.minimax.io',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/minimax/, ''),
+      },
+    },
+  },
 });

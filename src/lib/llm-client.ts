@@ -9,7 +9,10 @@
 export type ProviderType = 'openai' | 'anthropic' | 'gemini' | 'minimax' | 'ollama';
 
 const SYSTEM_PROMPT =
-  'You are an expert on ICT (Inner Circle Trader) trading methodology. Be precise, technical, and reference specific ICT concepts.';
+  'You are an expert on Standard ICT (Inner Circle Trader) methodology. Your knowledge comes from the specific ICT context provided. ' +
+  'Strictly adhere to standard ICT definitions. Do not hallucinate acronyms or concepts; if a term is unknown or ambiguous within ICT, state that it is unknown. ' +
+  'Prioritize the provided Knowledge Base context over general trading knowledge. ' +
+  'If the context is missing information needed to answer, use general ICT knowledge but explicitly flag it as "General ICT Knowledge" distinct from the specific context provided.';
 
 // ---------------------------------------------------------------------------
 // Storage keys
@@ -96,7 +99,9 @@ export const PROVIDERS: Record<ProviderType, ProviderConfig> = {
   minimax: {
     id: 'minimax',
     name: 'MiniMax',
-    defaultBaseUrl: 'https://api.minimax.io/v1',
+    defaultBaseUrl: import.meta.env.DEV 
+      ? 'http://localhost:5174/api/minimax/v1' 
+      : 'https://api.minimax.io/v1',
     defaultModel: 'MiniMax-M2.5',
     models: [
       { value: 'MiniMax-M2.5',     label: 'MiniMax M2.5' },

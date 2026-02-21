@@ -1,4 +1,4 @@
-import type { Entity, Relationship, EntityType, RelationshipType } from './types';
+import type { Entity, Relationship, EntityType } from './types';
 
 export interface RelationshipPattern {
   id: string;

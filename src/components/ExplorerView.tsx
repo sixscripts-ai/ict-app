@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Slider } from '@/components/ui/slider';
 import { Label } from '@/components/ui/label';
-import { MagnifyingGlass, Funnel, CheckSquare, Square, Star } from '@phosphor-icons/react';
+import { MagnifyingGlass, Funnel, CheckSquare, Star } from '@phosphor-icons/react';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { getEntityTypeIcon } from '@/lib/ai-processor';

@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { Cards, Brain, CheckCircle, Clock, Lightning, ArrowRight, ArrowCounterClockwise, Trophy } from '@phosphor-icons/react';
+import { Cards, Brain, CheckCircle, Clock, Lightning, ArrowCounterClockwise, Trophy } from '@phosphor-icons/react';
 import type { Entity, QuizCard } from '@/lib/types';
 
 interface QuizViewProps {

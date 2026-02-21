@@ -4,13 +4,13 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Sparkle, Brain, Target, Link, MagnifyingGlass, GraduationCap, Lightbulb } from '@phosphor-icons/react';
 import { toast } from 'sonner';
 import type { Entity, Relationship } from '@/lib/types';
 import type { AIGraphInternal } from '@/lib/schema';
-import { createDefaultSkillRegistry, type AgentSkill, type SkillCategory } from '@/lib/agent-skills';
+import { createDefaultSkillRegistry, type AgentSkill, type SkillCategory, type SkillResult } from '@/lib/agent-skills';
 
 interface SkillsViewProps {
   entities: Entity[];
@@ -39,8 +39,8 @@ const complexityColors: Record<string, string> = {
 export function SkillsView({ entities, relationships, aiGraph, onEntitySelect }: SkillsViewProps) {
   const [selectedCategory, setSelectedCategory] = useState<SkillCategory | 'all'>('all');
   const [selectedSkill, setSelectedSkill] = useState<AgentSkill | null>(null);
-  const [executionParams, setExecutionParams] = useState<Record<string, any>>({});
-  const [executionResult, setExecutionResult] = useState<any>(null);
+  const [executionParams, setExecutionParams] = useState<Record<string, unknown>>({});
+  const [executionResult, setExecutionResult] = useState<SkillResult | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
 
   const skillRegistry = createDefaultSkillRegistry();
@@ -87,7 +87,7 @@ export function SkillsView({ entities, relationships, aiGraph, onEntitySelect }:
     }
   };
 
-  const handleParamChange = (paramName: string, value: any) => {
+  const handleParamChange = (paramName: string, value: unknown) => {
     setExecutionParams(prev => ({
       ...prev,
       [paramName]: value,

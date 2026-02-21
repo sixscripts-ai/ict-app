@@ -42,7 +42,7 @@ export interface Entity {
   name: string;
   description?: string;
   content?: string;
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   sources: SourceReference[];
   validationStatus?: ValidationStatus;
   validationErrors?: string[];
@@ -64,7 +64,7 @@ export interface Relationship {
   type: RelationshipType;
   sourceId: string;
   targetId: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   createdAt: string;
 }
 

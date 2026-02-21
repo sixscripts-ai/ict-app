@@ -7,7 +7,7 @@ export interface AIGraphNode {
   description?: string;
   content?: string;
   embedding?: number[];
-  metadata: Record<string, any>;
+  metadata: Record<string, unknown>;
   tags: string[];
   weight: number;
   connections: string[];
@@ -19,7 +19,7 @@ export interface AIGraphEdge {
   target: string;
   type: RelationshipType;
   weight: number;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
   flowDirection?: 'forward' | 'backward' | 'bidirectional';
 }
 
@@ -29,7 +29,7 @@ export interface LogicFlowStep {
   input: string[];
   output: string;
   operation: string;
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface LogicFlow {
@@ -39,7 +39,7 @@ export interface LogicFlow {
   steps: LogicFlowStep[];
   entryPoint: string;
   exitPoints: string[];
-  metadata?: Record<string, any>;
+  metadata?: Record<string, unknown>;
 }
 
 export interface ChatSessionCache {
@@ -80,7 +80,7 @@ export interface MarkdownEnrichment {
   codeBlocks: Array<{
     language: string;
     content: string;
-    metadata?: Record<string, any>;
+    metadata?: Record<string, unknown>;
   }>;
   sections: Array<{
     heading: string;
@@ -171,12 +171,12 @@ export class AIGraphInternal {
 
     const lines = content.split('\n');
     let currentSection = '';
-    let currentLevel = 0;
+    // let currentLevel = 0;
     let inCodeBlock = false;
     let codeBlockLang = '';
     let codeBlockContent = '';
 
-    lines.forEach((line, index) => {
+    lines.forEach((line) => {
       const trimmed = line.trim();
 
       if (trimmed.startsWith('```')) {
@@ -640,16 +640,69 @@ Return ONLY a JSON array of ${this.embeddingDimension} floating point numbers re
   }
 
   async semanticSearch(query: string, topK: number = 10, filterType?: EntityType): Promise<Array<{ node: AIGraphNode; similarity: number }>> {
-    const queryEmbedding = await this.generateQueryEmbedding(query);
+    let queryEmbedding: number[];
+    try {
+      queryEmbedding = await this.generateQueryEmbedding(query);
+    } catch (error) {
+      console.warn('Failed to generate query embedding, using empty array for fallback:', error);
+      queryEmbedding = [];
+    }
+
+    const lowerQuery = query.toLowerCase();
+    const queryTerms = lowerQuery.split(/\s+/).filter(t => t.length > 2);
     
     const results: Array<{ node: AIGraphNode; similarity: number }> = [];
     
     for (const node of this.nodes.values()) {
       if (filterType && node.type !== filterType) continue;
-      if (!node.embedding) continue;
       
-      const similarity = this.cosineSimilarity(queryEmbedding, node.embedding);
-      results.push({ node, similarity });
+      let similarity = 0;
+      if (node.embedding && queryEmbedding.length > 0) {
+        similarity = this.cosineSimilarity(queryEmbedding, node.embedding);
+      }
+
+      // Keyword Boost Logic
+      // If semantic search failed (low similarity) or wasn't possible, checks for keywords
+      const nodeName = node.name.toLowerCase();
+      const nodeDesc = (node.description || '').toLowerCase();
+      const nodeTags = (node.tags || []).map(t => t.toLowerCase());
+      const nodeAbbr = (node.metadata?.abbreviation || '').toLowerCase();
+
+      // 1. Exact name match or very strong name match
+      if (nodeName === lowerQuery || (nodeAbbr && nodeAbbr === lowerQuery)) {
+        similarity = Math.max(similarity, 0.99); // Almost perfect match
+      } else if (nodeName.includes(lowerQuery) || (nodeAbbr && lowerQuery.includes(nodeAbbr))) {
+        // If query includes the abbreviation, it's a strong signal
+        similarity = Math.max(similarity, 0.85); 
+      } else if (nodeTags.includes(lowerQuery)) {
+        similarity = Math.max(similarity, 0.80); // Tag match
+      }
+
+      // 2. Term matching for multi-word queries
+      if (similarity < 0.7 && queryTerms.length > 0) {
+        const matches = queryTerms.filter(term => 
+          nodeName.includes(term) || 
+          nodeDesc.includes(term) || 
+          nodeTags.some(t => t.includes(term)) ||
+          (nodeAbbr && nodeAbbr === term) // Check abbreviation match
+        ).length;
+        
+        const termCoverage = matches / queryTerms.length;
+        
+        // Lower threshold for longer queries, or if we have a specific abbreviation match
+        const hasAbbreviationMatch = queryTerms.some(term => nodeAbbr && nodeAbbr === term);
+        
+        if (termCoverage > 0.3 || hasAbbreviationMatch) { 
+          // Boost based on how many terms matched
+          // If abbreviation matched, give it a solid baseline score
+          const baseScore = hasAbbreviationMatch ? 0.6 : 0.3;
+          similarity = Math.max(similarity, baseScore + (termCoverage * 0.4));
+        }
+      }
+
+      if (similarity > 0) {
+        results.push({ node, similarity });
+      }
     }
     
     results.sort((a, b) => b.similarity - a.similarity);

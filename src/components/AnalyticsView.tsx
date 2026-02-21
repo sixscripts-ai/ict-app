@@ -355,7 +355,7 @@ export function AnalyticsView({ entities }: AnalyticsViewProps) {
         </div>
         
         <div className="flex flex-wrap gap-2">
-          <Select value={timeFilter} onValueChange={(v) => setTimeFilter(v as any)}>
+          <Select value={timeFilter} onValueChange={(v) => setTimeFilter(v as 'all' | '7d' | '30d' | '90d')}>
             <SelectTrigger className="w-[140px]">
               <SelectValue placeholder="Time Period" />
             </SelectTrigger>

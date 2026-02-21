@@ -191,7 +191,7 @@ function MarkdownContent({ content }: { content: string }) {
 
 interface ChatViewProps {
   entities: Entity[];
-  onAskQuestion: (question: string) => Promise<{ answer: string; sources: Entity[] }>;
+  onAskQuestion: (question: string, history?: ChatMessage[]) => Promise<{ answer: string; sources: Entity[] }>;
 }
 
 interface PromptCategory {
@@ -301,7 +301,8 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
     setIsLoading(true);
 
     try {
-      const { answer, sources } = await onAskQuestion(input);
+      const history = [...(activeSession?.messages || []), userMessage];
+      const { answer, sources } = await onAskQuestion(input, history);
       
       const assistantMessage: ChatMessage = {
         id: `msg-${Date.now()}`,
@@ -541,7 +542,7 @@ export function ChatView({ entities, onAskQuestion }: ChatViewProps) {
   const currentCategory = promptCategories.find(cat => cat.id === selectedCategory) || promptCategories[0];
 
   return (
-    <div className="flex h-[calc(100vh-120px)]">
+    <div className="flex h-full w-full">
       {/* Session Sidebar */}
       <div className={`${showSidebar ? 'w-64' : 'w-0'} flex-shrink-0 transition-all duration-200 overflow-hidden border-r border-border/50`}>
         <div className="w-64 h-full flex flex-col">

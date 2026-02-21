@@ -142,7 +142,7 @@ export function SemanticSearchView({ entities, aiGraph, onEntitySelect }: Semant
           </div>
 
           <div className="grid gap-4">
-            {results.map((result, index) => (
+            {results.map((result) => (
               <Card 
                 key={result.entity.id}
                 className="border-border/50 hover:border-primary/50 transition-all cursor-pointer group"

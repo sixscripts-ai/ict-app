@@ -1,4 +1,10 @@
-import type { Entity, EntityType, DomainType, FileProcessingLog, Relationship, RelationshipType } from './types';
+import type { Entity, EntityType, DomainType, FileProcessingLog, Relationship } from './types';
+
+interface SourceRef {
+  filePath: string;
+  uploadId: string;
+  uploadedAt: string;
+}
 
 export async function processFile(
   file: File | { name: string; content: string; path: string },
@@ -47,11 +53,11 @@ async function parseFileContent(
   filePath: string,
   uploadId: string
 ): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
-  const entities: Entity[] = [];
-  const relationships: Relationship[] = [];
+  // const entities: Entity[] = [];
+  // const relationships: Relationship[] = [];
   const timestamp = new Date().toISOString();
 
-  const sourceRef = {
+  const sourceRef: SourceRef = {
     filePath,
     uploadId,
     uploadedAt: timestamp
@@ -83,7 +89,7 @@ async function parseFileContent(
   }
 }
 
-async function parseMarkdown(content: string, sourceRef: any): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
+async function parseMarkdown(content: string, sourceRef: SourceRef): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
   const entities: Entity[] = [];
   const relationships: Relationship[] = [];
   const timestamp = new Date().toISOString();
@@ -194,7 +200,7 @@ Only extract information that is explicitly stated in the document. Do not inven
   return { entities, relationships };
 }
 
-async function parseJSON(content: string, sourceRef: any, filePath: string): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
+async function parseJSON(content: string, sourceRef: SourceRef, filePath: string): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
   const entities: Entity[] = [];
   const relationships: Relationship[] = [];
   const timestamp = new Date().toISOString();
@@ -284,7 +290,7 @@ async function parseJSON(content: string, sourceRef: any, filePath: string): Pro
   }
 }
 
-async function parseYAML(content: string, sourceRef: any): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
+async function parseYAML(content: string, sourceRef: SourceRef): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
   const entities: Entity[] = [];
   const timestamp = new Date().toISOString();
 
@@ -306,7 +312,7 @@ async function parseYAML(content: string, sourceRef: any): Promise<{ entities: E
   return { entities, relationships: [] };
 }
 
-async function parsePython(content: string, sourceRef: any): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
+async function parsePython(content: string, sourceRef: SourceRef): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
   const entities: Entity[] = [];
   const relationships: Relationship[] = [];
   const timestamp = new Date().toISOString();
@@ -355,7 +361,7 @@ async function parsePython(content: string, sourceRef: any): Promise<{ entities:
   return { entities, relationships };
 }
 
-async function parseCSV(content: string, sourceRef: any): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
+async function parseCSV(content: string, sourceRef: SourceRef): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
   const entities: Entity[] = [];
   const timestamp = new Date().toISOString();
 
@@ -385,7 +391,7 @@ async function parseCSV(content: string, sourceRef: any): Promise<{ entities: En
   return { entities, relationships: [] };
 }
 
-async function parseText(content: string, sourceRef: any): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
+async function parseText(content: string, sourceRef: SourceRef): Promise<{ entities: Entity[]; relationships: Relationship[] }> {
   const entities: Entity[] = [];
   const timestamp = new Date().toISOString();
 

@@ -14,17 +14,14 @@ import { toast } from 'sonner';
 import type { Entity, Relationship } from '@/lib/types';
 import {
   trainAIOnTrades,
-  type AITrainingModel,
-  type TrainingPattern,
-  type TrainingInsight
+  type AITrainingModel
 } from '@/lib/ai-trainer';
 import { 
   exportToCSV, 
   exportToJSON, 
   exportFullEntities, 
   prepareTradeDataForExport,
-  generateExportFilename,
-  type FilteredTradeData 
+  generateExportFilename
 } from '@/lib/export-utils';
 
 interface TrainingViewProps {
@@ -33,7 +30,7 @@ interface TrainingViewProps {
   onEntitySelect: (entity: Entity) => void;
 }
 
-export function TrainingView({ entities, relationships, onEntitySelect }: TrainingViewProps) {
+export function TrainingView({ entities, relationships, onEntitySelect: _ }: TrainingViewProps) {
   const [trainingModel, setTrainingModel] = useKV<AITrainingModel | null>('ai-training-model', null);
   const [isTraining, setIsTraining] = useState(false);
   const [trainingProgress, setTrainingProgress] = useState(0);
@@ -204,14 +201,6 @@ export function TrainingView({ entities, relationships, onEntitySelect }: Traini
     toast.info('Filters cleared');
   };
 
-  const getPriorityColor = (priority: string) => {
-    switch (priority) {
-      case 'high': return 'text-destructive';
-      case 'medium': return 'text-warning';
-      case 'low': return 'text-muted-foreground';
-      default: return 'text-foreground';
-    }
-  };
 
   const getCategoryIcon = (category: string) => {
     switch (category) {

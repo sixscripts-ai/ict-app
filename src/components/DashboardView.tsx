@@ -4,7 +4,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Database, BookOpen, Target, TrendUp, Cube, Code, Notebook, CirclesThreePlus, Graph, ChatsCircle, Brain, Lightning, Sparkle, ArrowRight, ChartLine, BookOpenText, Heart, Warning, Crown, Star } from '@phosphor-icons/react';
 import { StatCard } from '@/components/shared/StatCard';
-import type { DatabaseStats, DomainType, EntityType, Entity, Relationship } from '@/lib/types';
+import type { DatabaseStats, DomainType, Entity, Relationship } from '@/lib/types';
 
 interface DashboardViewProps {
   stats: DatabaseStats;

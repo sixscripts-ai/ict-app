@@ -1,5 +1,4 @@
 import type { Entity, Relationship } from './types';
-import { useKV } from '@/hooks/use-kv';
 
 export interface TrainingPattern {
   id: string;
@@ -503,9 +502,9 @@ async function identifySetupQualityFactors(
 async function generateTrainingInsights(
   trades: Entity[],
   patterns: TrainingPattern[],
-  conceptScores: Record<string, any>,
-  modelScores: Record<string, any>,
-  qualityFactors: Array<any>
+  conceptScores: Record<string, { winRate: number; sampleSize: number; avgGrade?: number }>,
+  modelScores: Record<string, { winRate: number; sampleSize: number; avgGrade?: number }>,
+  qualityFactors: Array<{ factor: string; impact: number; description: string }>
 ): Promise<TrainingInsight[]> {
   const insights: TrainingInsight[] = [];
 
@@ -530,12 +529,12 @@ TRADER'S DATA:
 - Overall win rate: ${((winningTrades.length / trades.length) * 100).toFixed(1)}%
 
 CONCEPT PERFORMANCE:
-${Object.entries(conceptScores).map(([name, score]: [string, any]) => 
+${Object.entries(conceptScores).map(([name, score]) => 
   `- ${name}: ${(score.winRate * 100).toFixed(0)}% win rate (${score.sampleSize} trades)${score.avgGrade ? ` - avg quality ${score.avgGrade.toFixed(1)}/10` : ''}`
 ).join('\n')}
 
 MODEL PERFORMANCE:
-${Object.entries(modelScores).map(([name, score]: [string, any]) => 
+${Object.entries(modelScores).map(([name, score]) => 
   `- ${name}: ${(score.winRate * 100).toFixed(0)}% win rate (${score.sampleSize} trades)${score.avgGrade ? ` - avg quality ${score.avgGrade.toFixed(1)}/10` : ''}`
 ).join('\n')}
 

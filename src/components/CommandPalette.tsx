@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { Badge } from '@/components/ui/badge';
 import {
-  Database, BookOpen, Graph, MagnifyingGlass, ChartLine, Brain, Flask,
+  Database, BookOpen, Graph, MagnifyingGlass, ChartLine, Brain,
   ChatsCircle, GearSix, DownloadSimple, Lightning, ArrowRight, Tree,
   BookOpenText, GraduationCap, MagicWand, Upload
 } from '@phosphor-icons/react';

@@ -6,7 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
-import { ArrowsClockwise, MagnifyingGlassMinus, MagnifyingGlassPlus, Target, Path, Play, Pause, Keyboard, MagnifyingGlass, X } from '@phosphor-icons/react';
+import { MagnifyingGlassMinus, MagnifyingGlassPlus, Target, Path, Keyboard, MagnifyingGlass, X } from '@phosphor-icons/react';
 import type { Entity, Relationship, EntityType, RelationshipType } from '@/lib/types';
 
 interface GraphViewProps {
@@ -54,21 +54,35 @@ const entityLabels: Record<EntityType, string> = {
 
 export function GraphView({ entities, relationships, onEntitySelect }: GraphViewProps) {
   const svgRef = useRef<SVGSVGElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
   const animationFrameRef = useRef<number | undefined>(undefined);
   const simulationRef = useRef<d3.Simulation<GraphNode, GraphLink> | null>(null);
   const zoomBehaviorRef = useRef<d3.ZoomBehavior<SVGSVGElement, unknown> | null>(null);
   
+  // Refs to store D3 selections for localized updates without re-building simulation
+  const nodeSelectionRef = useRef<d3.Selection<SVGGElement, GraphNode, SVGGElement, unknown> | null>(null);
+  const linkSelectionRef = useRef<d3.Selection<SVGLineElement, GraphLink, SVGGElement, unknown> | null>(null);
+  const linkLabelSelectionRef = useRef<d3.Selection<SVGTextElement, GraphLink, SVGGElement, unknown> | null>(null);
+  const flowPathsRef = useRef<d3.Selection<SVGCircleElement, GraphLink, SVGGElement, unknown> | null>(null);
+
+  // Stability ref to avoid re-renders or stale closures in event handlers
+  const isStableRef = useRef(false);
+  const onEntitySelectRef = useRef(onEntitySelect);
+
+  useEffect(() => {
+    onEntitySelectRef.current = onEntitySelect;
+  }, [onEntitySelect]);
+
   const [selectedTypes, setSelectedTypes] = useState<EntityType[]>([]);
   const [zoom, setZoom] = useState(1);
   const [hoveredNode, setHoveredNode] = useState<GraphNode | null>(null);
   const [focusedNode, setFocusedNode] = useState<GraphNode | null>(null);
   const [showChainOnly, setShowChainOnly] = useState(false);
   const [animateFlow, setAnimateFlow] = useState(true);
-  const [isStable, setIsStable] = useState(false);
   const [keyboardSelectedNodeIndex, setKeyboardSelectedNodeIndex] = useState<number>(-1);
   const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
   const [graphSearch, setGraphSearch] = useState('');
+
+  const uniqueTypes = useMemo(() => Array.from(new Set(entities.map(e => e.type))), [entities]);
 
   const getChainEntitiesAndRelationships = useCallback(() => {
     const conceptIds = new Set(entities.filter(e => e.type === 'concept').map(e => e.id));
@@ -124,6 +138,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       ? entities.filter(e => selectedTypes.includes(e.type))
       : entities;
 
+    // Filter relationships based on visible entities
     let fRelationships = relationships.filter(r => 
       fEntities.some(e => e.id === r.sourceId) &&
       fEntities.some(e => e.id === r.targetId)
@@ -171,6 +186,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
     return pathEdges;
   }, [filteredRelationships]);
 
+  // Main Effect: Initialize and Update Topology
   useEffect(() => {
     if (!svgRef.current || filteredEntities.length === 0) return;
 
@@ -180,6 +196,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
     const width = svgRef.current.clientWidth;
     const height = svgRef.current.clientHeight;
 
+    // Create mutable D3 data objects
     const nodes: GraphNode[] = filteredEntities.map(e => ({
       id: e.id,
       type: e.type,
@@ -193,6 +210,9 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       type: r.type
     }));
 
+    // Reset stability
+    isStableRef.current = false;
+
     const simulation = d3.forceSimulation<GraphNode>(nodes)
       .force('link', d3.forceLink<GraphNode, GraphLink>(links)
         .id(d => d.id)
@@ -203,7 +223,6 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       .alphaDecay(0.05);
     
     simulationRef.current = simulation;
-    setIsStable(false);
 
     const g = svg.append('g');
 
@@ -245,7 +264,7 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
 
     const linkGroup = g.append('g');
 
-    const link = linkGroup
+    const linkVector = linkGroup
       .selectAll('line')
       .data(links)
       .join('line')
@@ -254,8 +273,10 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       .attr('stroke-width', 2)
       .attr('class', 'graph-link')
       .attr('marker-end', 'url(#arrowhead)');
+    
+    linkSelectionRef.current = linkVector;
 
-    const flowPaths = linkGroup
+    const flowPathsVector = linkGroup
       .selectAll('circle.flow-particle')
       .data(links.filter(l => {
         const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
@@ -277,8 +298,10 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
       })
       .attr('opacity', 0)
       .style('pointer-events', 'none');
+    
+    flowPathsRef.current = flowPathsVector;
 
-    const linkLabels = g.append('g')
+    const linkLabelsVector = g.append('g')
       .selectAll('text')
       .data(links)
       .join('text')
@@ -300,59 +323,15 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         };
         return typeMap[d.type] || '';
       });
-
-    const animateFlowParticles = () => {
-      if (!animateFlow) {
-        flowPaths.attr('opacity', 0);
-        return;
-      }
-
-      const duration = 2000;
-      const startTime = Date.now();
-
-      const animate = () => {
-        if (!animateFlow) {
-          flowPaths.attr('opacity', 0);
-          if (animationFrameRef.current) {
-            cancelAnimationFrame(animationFrameRef.current);
-          }
-          return;
-        }
-
-        const elapsed = Date.now() - startTime;
-        const progress = (elapsed % duration) / duration;
-
-        flowPaths.each(function(d) {
-          const source = d.source as GraphNode;
-          const target = d.target as GraphNode;
-          
-          if (!source.x || !source.y || !target.x || !target.y) return;
-
-          const x = source.x + (target.x - source.x) * progress;
-          const y = source.y + (target.y - source.y) * progress;
-
-          const fadeIn = progress < 0.1 ? progress / 0.1 : 1;
-          const fadeOut = progress > 0.9 ? (1 - progress) / 0.1 : 1;
-          const opacity = Math.min(fadeIn, fadeOut) * 0.8;
-
-          d3.select(this)
-            .attr('cx', x)
-            .attr('cy', y)
-            .attr('opacity', opacity);
-        });
-
-        animationFrameRef.current = requestAnimationFrame(animate);
-      };
-
-      animate();
-    };
+    
+    linkLabelSelectionRef.current = linkLabelsVector;
 
     const drag = d3.drag<SVGGElement, GraphNode>()
       .on('start', (event, d) => {
         if (!event.active) simulation.alphaTarget(0.3).restart();
         d.fx = d.x;
         d.fy = d.y;
-        setIsStable(false);
+        isStableRef.current = false;
       })
       .on('drag', (event, d) => {
         d.fx = event.x;
@@ -364,34 +343,25 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         d.fy = null;
       });
 
-    const node = g.append('g')
+    const nodeVector = g.append('g')
       .selectAll('g')
       .data(nodes)
       .join('g')
       .attr('cursor', 'pointer')
-      .call(drag as any);
+      .call(drag);
+    
+    nodeSelectionRef.current = nodeVector;
 
-    node.append('circle')
+    nodeVector.append('circle')
       .attr('r', 30)
+      // Initial styling is simple, effects will update highlights
       .attr('fill', d => entityColors[d.type])
-      .attr('stroke', d => {
-        const selectedEntity = keyboardSelectedNodeIndex >= 0 ? filteredEntities[keyboardSelectedNodeIndex] : null;
-        if (selectedEntity && d.id === selectedEntity.id) {
-          return '#ffffff';
-        }
-        return d3.color(entityColors[d.type])?.brighter(0.5)?.toString() || entityColors[d.type];
-      })
-      .attr('stroke-width', d => {
-        const selectedEntity = keyboardSelectedNodeIndex >= 0 ? filteredEntities[keyboardSelectedNodeIndex] : null;
-        if (selectedEntity && d.id === selectedEntity.id) {
-          return 4;
-        }
-        return 3;
-      })
+      .attr('stroke', d => d3.color(entityColors[d.type])?.brighter(0.5)?.toString() || entityColors[d.type])
+      .attr('stroke-width', 3)
       .attr('opacity', 0.9)
       .attr('class', 'graph-node');
 
-    node.append('text')
+    nodeVector.append('text')
       .attr('text-anchor', 'middle')
       .attr('dy', 50)
       .attr('font-size', 12)
@@ -402,150 +372,229 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
         const maxLength = 20;
         return d.name.length > maxLength ? d.name.substring(0, maxLength) + '...' : d.name;
       });
-
-    const updateFocusMode = (focusNodeId: string | null) => {
-      if (focusNodeId) {
-        const pathNodes = getPathNodes(focusNodeId);
-        const pathEdges = getPathEdges(pathNodes);
-        
-        node.each(function(d) {
-          const isInPath = pathNodes.has(d.id);
-          const isFocused = d.id === focusNodeId;
-          d3.select(this)
-            .select('circle')
-            .attr('opacity', isInPath ? 0.9 : 0.2)
-            .attr('r', isFocused ? 35 : 30);
-          
-          d3.select(this)
-            .select('text')
-            .attr('opacity', isInPath ? 1 : 0.3);
-        });
-        
-        link.each(function(l) {
-          const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
-          const targetId = typeof l.target === 'string' ? l.target : l.target.id;
-          const edgeKey = `${sourceId}-${targetId}`;
-          const isInPath = pathEdges.has(edgeKey);
-          
-          d3.select(this)
-            .attr('stroke-opacity', isInPath ? 0.8 : 0.1)
-            .attr('stroke-width', isInPath ? 3 : 2)
-            .attr('stroke', isInPath ? '#00ff88' : '#35354a');
-        });
-        
-        linkLabels.each(function(l) {
-          const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
-          const targetId = typeof l.target === 'string' ? l.target : l.target.id;
-          const edgeKey = `${sourceId}-${targetId}`;
-          const isInPath = pathEdges.has(edgeKey);
-          
-          d3.select(this)
-            .attr('opacity', isInPath ? 1 : 0);
-        });
-      } else {
-        node.selectAll('circle')
-          .attr('opacity', 0.9)
-          .attr('r', 30);
-        
-        node.selectAll('text')
-          .attr('opacity', 1);
-        
-        link
-          .attr('stroke-opacity', 0.6)
-          .attr('stroke-width', 2)
-          .attr('stroke', '#35354a');
-        
-        linkLabels
-          .attr('opacity', 1);
-      }
-    };
-
-    node.on('click', (event, d) => {
+    
+    // Bind interaction events
+    nodeVector.on('click', (event, d) => {
       event.stopPropagation();
       if (event.shiftKey) {
-        if (focusedNode?.id === d.id) {
-          setFocusedNode(null);
-        } else {
-          setFocusedNode(d);
-        }
+        setFocusedNode(prev => prev?.id === d.id ? null : d);
       } else {
-        onEntitySelect(d.entity);
+        onEntitySelectRef.current(d.entity);
       }
     })
-    .on('mouseenter', function(event, d) {
-      if (!focusedNode && isStable) {
-        setHoveredNode(d);
-        d3.select(this).select('circle')
-          .transition()
-          .duration(200)
-          .attr('r', 35)
-          .attr('stroke-width', 5);
-      }
+    .on('mouseenter', function() {
+      // Use ref to check stability to avoid re-binding handlers
+      if (!isStableRef.current) return;
+      
+      const d = d3.select(this).datum() as GraphNode;
+      // Note: focusedNode comes from strict dependency, checking 'focusedNode' here would be stale
+      // But we can check if a node is actively focused in parent component
+      setFocusedNode(current => {
+        if (!current) {
+          setHoveredNode(d);
+          d3.select(this).select('circle')
+            .transition()
+            .duration(200)
+            .attr('r', 35)
+            .attr('stroke-width', 5);
+        }
+        return current;
+      });
     })
-    .on('mouseleave', function(event, d) {
-      if (!focusedNode && isStable) {
-        setHoveredNode(null);
-        d3.select(this).select('circle')
-          .transition()
-          .duration(200)
-          .attr('r', 30)
-          .attr('stroke-width', 3);
-      }
+    .on('mouseleave', function() {
+      if (!isStableRef.current) return;
+
+      setFocusedNode(current => {
+        if (!current) {
+          setHoveredNode(null);
+          d3.select(this).select('circle')
+            .transition()
+            .duration(200)
+            .attr('r', 30)
+            .attr('stroke-width', 3);
+        }
+        return current;
+      });
     });
 
     let tickCount = 0;
     simulation.on('tick', () => {
       tickCount++;
       
-      link
+      linkVector
         .attr('x1', d => (d.source as GraphNode).x ?? 0)
         .attr('y1', d => (d.source as GraphNode).y ?? 0)
         .attr('x2', d => (d.target as GraphNode).x ?? 0)
         .attr('y2', d => (d.target as GraphNode).y ?? 0);
 
-      linkLabels
+      linkLabelsVector
         .attr('x', d => ((d.source as GraphNode).x! + (d.target as GraphNode).x!) / 2)
         .attr('y', d => ((d.source as GraphNode).y! + (d.target as GraphNode).y!) / 2);
 
-      node.attr('transform', d => `translate(${d.x},${d.y})`);
+      nodeVector.attr('transform', d => `translate(${d.x},${d.y})`);
       
       if (simulation.alpha() < 0.01 || tickCount > 200) {
         simulation.stop();
-        setIsStable(true);
+        isStableRef.current = true;
       }
     });
-
-    if (focusedNode) {
-      updateFocusMode(focusedNode.id);
-    }
-
-    animateFlowParticles();
 
     return () => {
       simulation.stop();
       if (animationFrameRef.current) {
         cancelAnimationFrame(animationFrameRef.current);
       }
+      isStableRef.current = false;
     };
-  }, [
-    filteredEntities, 
-    filteredRelationships, 
-    onEntitySelect, 
-    focusedNode, 
-    animateFlow, 
-    isStable, 
-    keyboardSelectedNodeIndex,
-    getPathNodes,
-    getPathEdges
-  ]);
+  }, [filteredEntities, filteredRelationships]); // Only ref simulation on data change
 
-  // Graph search: mutate node/label opacity without rebuilding simulation
+  // Effect: Update Focus Visuals (without restarting simulation)
+  useEffect(() => {
+    const node = nodeSelectionRef.current;
+    const link = linkSelectionRef.current;
+    const linkLabels = linkLabelSelectionRef.current;
+
+    if (!node || !link || !linkLabels) return;
+
+    if (focusedNode) {
+      const pathNodes = getPathNodes(focusedNode.id);
+      const pathEdges = getPathEdges(pathNodes);
+      
+      node.each(function(d) {
+        const isInPath = pathNodes.has(d.id);
+        const isFocused = d.id === focusedNode.id;
+        d3.select(this)
+          .select('circle')
+          .attr('opacity', isInPath ? 0.9 : 0.2)
+          .attr('r', isFocused ? 35 : 30);
+        
+        d3.select(this)
+          .select('text')
+          .attr('opacity', isInPath ? 1 : 0.3);
+      });
+      
+      link.each(function(l) {
+        const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
+        const targetId = typeof l.target === 'string' ? l.target : l.target.id;
+        const edgeKey = `${sourceId}-${targetId}`;
+        const isInPath = pathEdges.has(edgeKey);
+        
+        d3.select(this)
+          .attr('stroke-opacity', isInPath ? 0.8 : 0.1)
+          .attr('stroke-width', isInPath ? 3 : 2)
+          .attr('stroke', isInPath ? '#00ff88' : '#35354a');
+      });
+      
+      linkLabels.each(function(l) {
+        const sourceId = typeof l.source === 'string' ? l.source : l.source.id;
+        const targetId = typeof l.target === 'string' ? l.target : l.target.id;
+        const edgeKey = `${sourceId}-${targetId}`;
+        const isInPath = pathEdges.has(edgeKey);
+        
+        d3.select(this)
+          .attr('opacity', isInPath ? 1 : 0);
+      });
+    } else {
+      // Reset visuals
+      node.each(function() {
+        d3.select(this).select('circle')
+          .attr('opacity', 0.9)
+          .attr('r', 30);
+        d3.select(this).select('text')
+          .attr('opacity', 1);
+      });
+      
+      link
+        .attr('stroke-opacity', 0.6)
+        .attr('stroke-width', 2)
+        .attr('stroke', '#35354a');
+      
+      linkLabels
+        .attr('opacity', 1);
+    }
+  }, [focusedNode, getPathNodes, getPathEdges]);
+
+  // Effect: Update Keyboard Selection Visuals
+  useEffect(() => {
+    const node = nodeSelectionRef.current;
+    if (!node) return;
+
+    node.each(function(d) {
+      const isSelected = keyboardSelectedNodeIndex >= 0 && 
+                         filteredEntities[keyboardSelectedNodeIndex] && 
+                         d.id === filteredEntities[keyboardSelectedNodeIndex].id;
+      
+      d3.select(this)
+        .select('circle')
+        .attr('stroke', isSelected ? '#ffffff' : (d3.color(entityColors[d.type])?.brighter(0.5)?.toString() || entityColors[d.type]))
+        .attr('stroke-width', isSelected ? 4 : 3);
+    });
+  }, [keyboardSelectedNodeIndex, filteredEntities]);
+
+
+  // Effect: Flow Animation
+  useEffect(() => {
+    const flowPaths = flowPathsRef.current;
+    if (!flowPaths) return;
+
+    if (!animateFlow) {
+      flowPaths.attr('opacity', 0);
+      return;
+    }
+
+    const duration = 2000;
+    const startTime = Date.now();
+
+    const animate = () => {
+      // Check ref directly to allow stopping without re-triggering effect
+      if (!animateFlow && animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+        return;
+      }
+
+      const elapsed = Date.now() - startTime;
+      const progress = (elapsed % duration) / duration;
+
+      flowPaths.each(function(d) {
+        const source = d.source as GraphNode;
+        const target = d.target as GraphNode;
+        
+        if (!source.x || !source.y || !target.x || !target.y) return;
+
+        const x = source.x + (target.x - source.x) * progress;
+        const y = source.y + (target.y - source.y) * progress;
+
+        const fadeIn = progress < 0.1 ? progress / 0.1 : 1;
+        const fadeOut = progress > 0.9 ? (1 - progress) / 0.1 : 1;
+        const opacity = Math.min(fadeIn, fadeOut) * 0.8;
+
+        d3.select(this)
+          .attr('cx', x)
+          .attr('cy', y)
+          .attr('opacity', opacity);
+      });
+
+      animationFrameRef.current = requestAnimationFrame(animate);
+    };
+
+    animate();
+
+    return () => {
+      if (animationFrameRef.current) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    };
+  }, [animateFlow]); // Re-run only when toggle changes
+
+  // Graph search: mutate node/label opacity 
   useEffect(() => {
     if (!svgRef.current) return;
     const svg = d3.select(svgRef.current);
     const q = graphSearch.trim().toLowerCase();
+    
     if (!q) {
       svg.selectAll<SVGGElement, GraphNode>('g g')
+
         .style('opacity', null);
       svg.selectAll<SVGTextElement, GraphNode>('text.node-label')
         .style('opacity', null);
@@ -793,7 +842,17 @@ export function GraphView({ entities, relationships, onEntitySelect }: GraphView
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [filteredEntities, keyboardSelectedNodeIndex, focusedNode, showKeyboardHelp, showChainOnly, animateFlow, uniqueTypes, centerOnNode, showKeyboardHelp]);
+  }, [
+    filteredEntities, 
+    keyboardSelectedNodeIndex, 
+    focusedNode, 
+    showKeyboardHelp, 
+    showChainOnly, 
+    animateFlow, 
+    uniqueTypes, 
+    centerOnNode,
+    onEntitySelect
+  ]);
 
   // centerOnNode moved up
 

@@ -1,5 +1,5 @@
 import type { Entity, Relationship, RelationshipType, EntityType } from './types';
-import type { AIGraphInternal, AIGraphNode, LogicFlow, LogicFlowStep } from './schema';
+import type { AIGraphInternal } from './schema';
 
 export type SkillCategory = 
   | 'analysis'
@@ -17,12 +17,12 @@ export interface SkillParameter {
   type: string;
   required: boolean;
   description: string;
-  defaultValue?: any;
+  defaultValue?: unknown;
 }
 
 export interface SkillResult {
   success: boolean;
-  data: any;
+  data: unknown;
   confidence: number;
   sources: Entity[];
   reasoning: string;
@@ -40,7 +40,7 @@ export interface AgentSkill {
   requiredEntities: EntityType[];
   outputFormat: string;
   examples: string[];
-  execute: (params: Record<string, any>, context: SkillExecutionContext) => Promise<SkillResult>;
+  execute: (params: Record<string, unknown>, context: SkillExecutionContext) => Promise<SkillResult>;
 }
 
 export interface SkillExecutionContext {
@@ -48,7 +48,7 @@ export interface SkillExecutionContext {
   relationships: Relationship[];
   aiGraph: AIGraphInternal;
   sessionId?: string;
-  userPreferences?: Record<string, any>;
+  userPreferences?: Record<string, unknown>;
 }
 
 export interface SkillChain {
@@ -110,7 +110,7 @@ export class AgentSkillRegistry {
 
   async executeSkill(
     skillId: string,
-    params: Record<string, any>,
+    params: Record<string, unknown>,
     context: SkillExecutionContext
   ): Promise<SkillResult> {
     const skill = this.skills.get(skillId);
@@ -147,7 +147,7 @@ export class AgentSkillRegistry {
 
   async executeChain(
     chainId: string,
-    initialParams: Record<string, any>,
+    initialParams: Record<string, unknown>,
     context: SkillExecutionContext
   ): Promise<SkillResult[]> {
     const chain = this.chains.get(chainId);
@@ -960,7 +960,7 @@ function createTradeStatisticsSkill(): AgentSkill {
       const totalGrade = trades.reduce((sum, t) => sum + (t.metadata?.grade || 0), 0);
       const avgGrade = trades.length > 0 ? totalGrade / trades.length : 0;
 
-      const groupedStats: Record<string, any> = {};
+      const groupedStats: Record<string, { total: number; wins: number; winRate: number }> = {};
 
       if (params.groupBy === 'session') {
         const sessions = new Set(trades.map(t => t.metadata?.session || t.metadata?.killzone).filter(Boolean));
@@ -1030,7 +1030,14 @@ function createKillzoneAnalysisSkill(): AgentSkill {
       const trades = context.entities.filter(e => e.type === 'trade');
 
       const killzones = ['LON', 'NY', 'ASI'];
-      const analysis: Record<string, any> = {};
+      const analysis: Record<string, {
+        totalTrades: number;
+        wins: number;
+        losses: number;
+        winRate: number;
+        avgRR: number;
+        trades: Entity[];
+      }> = {};
 
       for (const kz of killzones) {
         const kzTrades = trades.filter(
@@ -1052,7 +1059,7 @@ function createKillzoneAnalysisSkill(): AgentSkill {
 
       const bestKZ = Object.entries(analysis).reduce((best, [kz, data]) => {
         return data.winRate > (best.data?.winRate || 0) ? { kz, data } : best;
-      }, {} as any);
+      }, {} as { kz?: string, data?: typeof analysis[string] });
 
       return {
         success: true,
@@ -1516,10 +1523,10 @@ function createRecommendationEngineSkill(): AgentSkill {
       'What patterns should I practice?',
     ],
     execute: async (params, context) => {
-      const trades = context.entities.filter(e => e.type === 'trade');
       const concepts = context.entities.filter(e => e.type === 'concept');
-      const models = context.entities.filter(e => e.type === 'model');
+      // const models = context.entities.filter(e => e.type === 'model');
 
+      const trades = context.entities.filter(e => e.type === 'trade');
       const wins = trades.filter(t => t.metadata?.result?.toLowerCase() === 'win');
       const losses = trades.filter(t => t.metadata?.result?.toLowerCase() === 'loss');
 

@@ -11,9 +11,9 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 const KV_PREFIX = 'ict-kv:';
 
 // In-memory subscribers so multiple useKV calls with the same key stay in sync
-const listeners = new Map<string, Set<(value: any) => void>>();
+const listeners = new Map<string, Set<(value: unknown) => void>>();
 
-function notify(key: string, value: any) {
+function notify(key: string, value: unknown) {
   const subs = listeners.get(key);
   if (subs) {
     for (const fn of subs) fn(value);
@@ -65,8 +65,9 @@ export function useKV<T = string>(
       listeners.set(key, new Set());
     }
     const subs = listeners.get(key)!;
-    const handler = (newVal: any) => {
-      setValueState(newVal);
+    const handler = (newVal: unknown) => {
+      // We can't type check newVal properly here as it comes from global event bus
+      setValueState(newVal as T);
     };
     subs.add(handler);
 

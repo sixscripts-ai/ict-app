@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -60,7 +60,6 @@ export function RecommendationsView({ entities, relationships, aiGraph, onEntity
       
       if (tradesInCluster.length >= 2) {
         // Find common concepts
-        const commonConceptIds = new Set<string>();
         const conceptCounts = new Map<string, number>();
         
         tradesInCluster.forEach(trade => {
@@ -107,7 +106,7 @@ export function RecommendationsView({ entities, relationships, aiGraph, onEntity
     }
     
     setPatternInsights(insights.sort((a, b) => b.winRate - a.winRate));
-  }, [entities, relationships]);
+  }, [entities, relationships, aiGraph]);
 
   useEffect(() => {
     if (tradeEntities.length > 0) {
@@ -172,11 +171,11 @@ export function RecommendationsView({ entities, relationships, aiGraph, onEntity
   const determineCategory = (
     similarity: number,
     sharedConceptCount: number,
-    metadata: Record<string, any>
+    metadata: Record<string, unknown>
   ): Recommendation['category'] => {
     if (similarity > 0.8) return 'similar_setup';
     if (sharedConceptCount >= 3) return 'concept_match';
-    if (metadata?.grade && metadata.grade >= 8) return 'outcome_correlation';
+    if ((metadata as any)?.grade && (metadata as any).grade >= 8) return 'outcome_correlation';
     return 'pattern_alignment';
   };
 
@@ -220,9 +219,9 @@ export function RecommendationsView({ entities, relationships, aiGraph, onEntity
     }
   };
 
-  const getOutcomeColor = (metadata: Record<string, any>) => {
-    const result = metadata?.result || metadata?.outcome;
-    const pnl = metadata?.pnl;
+  const getOutcomeColor = (metadata: Record<string, unknown>) => {
+    const result = (metadata as any)?.result || (metadata as any)?.outcome;
+    const pnl = (metadata as any)?.pnl;
     
     if (result === 'win' || result === 'profit' || (pnl && pnl > 0)) {
       return 'text-primary';
